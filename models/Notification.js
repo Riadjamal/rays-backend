@@ -1,0 +1,39 @@
+const mongoose = require('mongoose');
+
+const notificationSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    refPath: 'userModel'
+  },
+  userModel: {
+    type: String,
+    required: true,
+    enum: ['User', 'Agent', 'Driver']
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['booking_confirmation', 'visa_approval', 'seat_confirmation', 'trip_reminder']
+  },
+  message: {
+    type: String,
+    required: true
+  },
+  channel: {
+    type: String,
+    required: true,
+    enum: ['email', 'whatsapp', 'in_app']
+  },
+  isRead: {
+    type: Boolean,
+    default: false
+  },
+  sentAt: Date,
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+module.exports = mongoose.model('Notification', notificationSchema);

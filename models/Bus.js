@@ -1,0 +1,65 @@
+const mongoose = require('mongoose');
+
+const busSchema = new mongoose.Schema({
+  busNumber: {
+    type: String,
+    required: [true, 'Bus number is required'],
+    unique: true,
+    trim: true
+  },
+  name: {
+    type: String,
+    required: [true, 'Bus name is required'],
+    trim: true
+  },
+  capacity: {
+    type: Number,
+    required: [true, 'Bus capacity is required'],
+    min: 1
+  },
+  seatLayout: {
+    rows: {
+      type: Number,
+      required: true
+    },
+    columns: {
+      type: Number,
+      required: true
+    },
+    configuration: [{
+      seatNumber: String,
+      row: Number,
+      column: Number,
+      isAisle: Boolean
+    }]
+  },
+  driver: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Driver'
+  },
+  route: {
+    type: String,
+    required: [true, 'Route is required'],
+    enum: ['SHJ', 'DXB']
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Update timestamp
+busSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
+module.exports = mongoose.model('Bus', busSchema);
