@@ -110,6 +110,7 @@ const seedData = async () => {
             bookingNumber: 'BK-SEED-001',
             user: user._id,
             agent: agent._id,
+            passengerName: 'Mohammed Ali',
             travelDate: new Date(),
             location: 'SHJ',
             productType: 'with_uae_visa',
