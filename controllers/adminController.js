@@ -110,6 +110,39 @@ exports.approveAgent = async (req, res, next) => {
   }
 };
 
+// Create new agent
+exports.createAgent = async (req, res, next) => {
+  try {
+    const { companyName, contactPerson, email, phone, password, companyDetails } = req.body;
+
+    const existingAgent = await Agent.findOne({ email });
+    if (existingAgent) {
+      return res.status(400).json({
+        success: false,
+        message: 'Agent with this email already exists'
+      });
+    }
+
+    const agent = await Agent.create({
+      companyName,
+      contactPerson,
+      email,
+      phone,
+      password,
+      companyDetails,
+      isApproved: true // Manually created agents are approved by default
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Agent created successfully',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get all drivers
 exports.getDrivers = async (req, res, next) => {
   try {

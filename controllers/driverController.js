@@ -7,7 +7,7 @@ exports.getProfile = async (req, res, next) => {
   try {
     const driver = await Driver.findById(req.userId)
       .populate('assignedBuses');
-    
+
     res.json({
       success: true,
       data: driver
@@ -21,7 +21,7 @@ exports.getProfile = async (req, res, next) => {
 exports.getTrips = async (req, res, next) => {
   try {
     const driver = await Driver.findById(req.userId);
-    
+
     const trips = await Booking.find({
       bus: { $in: driver.assignedBuses },
       status: { $in: ['confirmed', 'processing'] }
@@ -29,7 +29,7 @@ exports.getTrips = async (req, res, next) => {
       .populate('user', 'name phone')
       .populate('seat')
       .sort({ travelDate: 1 });
-    
+
     res.json({
       success: true,
       data: trips
@@ -46,14 +46,14 @@ exports.getTripById = async (req, res, next) => {
       .populate('user', 'name phone email')
       .populate('seat')
       .populate('bus');
-    
+
     if (!trip) {
       return res.status(404).json({
         success: false,
         message: 'Trip not found'
       });
     }
-    
+
     res.json({
       success: true,
       data: trip
@@ -67,7 +67,7 @@ exports.getTripById = async (req, res, next) => {
 exports.getPassengerList = async (req, res, next) => {
   try {
     const { busId, travelDate } = req.params;
-    
+
     const passengers = await Booking.find({
       bus: busId,
       travelDate: new Date(travelDate),
@@ -75,7 +75,7 @@ exports.getPassengerList = async (req, res, next) => {
     })
       .populate('user', 'name phone email')
       .populate('seat');
-    
+
     res.json({
       success: true,
       data: passengers
@@ -90,7 +90,7 @@ exports.getRouteDetails = async (req, res, next) => {
   try {
     const driver = await Driver.findById(req.userId);
     const bus = await Bus.findById(driver.assignedBuses[0]);
-    
+
     res.json({
       success: true,
       data: {
@@ -108,20 +108,20 @@ exports.getRouteDetails = async (req, res, next) => {
 exports.checkInPassenger = async (req, res, next) => {
   try {
     const { bookingId } = req.body;
-    
+
     const booking = await Booking.findById(bookingId);
-    
+
     if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
       });
     }
-    
+
     // Update booking status to show passenger boarded
     booking.status = 'completed';
     await booking.save();
-    
+
     res.json({
       success: true,
       message: 'Passenger checked in successfully',
@@ -137,7 +137,7 @@ exports.getNotifications = async (req, res, next) => {
   try {
     const driver = await Driver.findById(req.userId)
       .populate('notifications');
-    
+
     res.json({
       success: true,
       data: driver.notifications

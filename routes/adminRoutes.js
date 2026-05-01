@@ -23,6 +23,9 @@ router.get('/agents', adminController.getAgents);
 // PUT /api/admin/agents/:id/approve - Approve agent
 router.put('/agents/:id/approve', adminController.approveAgent);
 
+// POST /api/admin/agents - Create new agent
+router.post('/agents', adminController.createAgent);
+
 // PUT /api/admin/agents/:id/reject - Reject agent
 router.put('/agents/:id/reject', adminController.rejectAgent);
 

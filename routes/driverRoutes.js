@@ -8,6 +8,9 @@ const authorize = require('../middleware/roleMiddleware');
 router.use(auth);
 router.use(authorize('driver'));
 
+// GET /api/driver/dashboard - Get driver dashboard
+router.get('/dashboard', driverController.getDashboard);
+
 // GET /api/driver/profile - Get driver profile
 router.get('/profile', driverController.getProfile);
 

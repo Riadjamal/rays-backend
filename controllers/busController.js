@@ -1,4 +1,5 @@
 const Bus = require('../models/Bus');
+const Driver = require('../models/Driver');
 
 // Create bus
 exports.createBus = async (req, res, next) => {
@@ -13,6 +14,10 @@ exports.createBus = async (req, res, next) => {
       route,
       driver
     });
+
+    if (driver) {
+      await Driver.findByIdAndUpdate(driver, { $addToSet: { assignedBuses: bus._id } });
+    }
     
     res.status(201).json({
       success: true,
@@ -124,8 +129,16 @@ exports.assignDriver = async (req, res, next) => {
     const { driverId } = req.body;
     
     const bus = await Bus.findById(req.params.id);
+    const oldDriver = bus.driver;
     bus.driver = driverId;
     await bus.save();
+
+    if (oldDriver) {
+      await Driver.findByIdAndUpdate(oldDriver, { $pull: { assignedBuses: bus._id } });
+    }
+    if (driverId) {
+      await Driver.findByIdAndUpdate(driverId, { $addToSet: { assignedBuses: bus._id } });
+    }
     
     res.json({
       success: true,
