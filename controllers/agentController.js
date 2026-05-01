@@ -1,6 +1,9 @@
 const Agent = require('../models/Agent');
 const User = require('../models/User');
 const Booking = require('../models/Booking');
+const Bus = require('../models/Bus');
+const Seat = require('../models/Seat');
+const Payment = require('../models/Payment');
 
 // Get agent dashboard stats
 exports.getDashboard = async (req, res, next) => {
@@ -142,33 +145,36 @@ exports.createBooking = async (req, res, next) => {
       productType,
       documents,
       passportNumber,
-      passportExpiry
+      passportExpiry,
+      busId,
+      seatNumber
     } = req.body;
 
     const agent = await Agent.findById(req.userId);
 
     if (!agent.isApproved) {
-      return res.status(403).json({
-        success: false,
-        message: 'Agent account not approved'
-      });
+      return res.status(403).json({ success: false, message: 'Agent account not approved' });
     }
 
-    // Find or Create User for the customer
+    // 1. Wallet Balance Check (Fixed price 50 AED for now or based on product)
+    const price = productType === 'with_uae_visa' ? 250 : 50; 
+    if (agent.wallet.balance < price) {
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
+    }
+
+    // 2. Find or Create User
     let user = await User.findOne({ email: customerEmail });
     if (!user) {
       user = await User.create({
         name: customerName,
         email: customerEmail,
         phone: customerPhone,
-        password: Math.random().toString(36).slice(-8), // Temporary password for guest
-        passportDetails: {
-          number: passportNumber,
-          expiryDate: passportExpiry
-        }
+        password: Math.random().toString(36).slice(-8),
+        passportDetails: { number: passportNumber, expiryDate: passportExpiry }
       });
     }
 
+    // 3. Create Booking
     const booking = await Booking.create({
       bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
       user: user._id,
@@ -177,21 +183,51 @@ exports.createBooking = async (req, res, next) => {
       location,
       productType,
       passengerName: customerName,
-      passportDetails: {
-        number: passportNumber,
-        expiryDate: passportExpiry
-      },
+      passportDetails: { number: passportNumber, expiryDate: passportExpiry },
       documents,
-      status: 'pending'
+      bus: busId,
+      status: 'confirmed' // Auto-confirm for agents since they pay via wallet
     });
 
-    // Add to agent's bookings
-    agent.bookings.push(booking._id);
+    // 4. Handle Seat Reservation
+    if (seatNumber) {
+        const seat = await Seat.create({
+            bus: busId,
+            seatNumber,
+            tripDate: new Date(travelDate),
+            isBooked: true,
+            bookedBy: agent._id,
+            booking: booking._id
+        });
+        booking.seat = seat._id;
+        await booking.save();
+    }
+
+    // 5. Create Payment Record
+    const payment = await Payment.create({
+        booking: booking._id,
+        user: agent._id,
+        amount: price,
+        paymentMethod: 'wallet',
+        status: 'completed',
+        transactionId: `TXN-${Date.now().toString(36).toUpperCase()}`
+    });
+    booking.payment = payment._id;
+    await booking.save();
+
+    // 6. Deduct from Wallet
+    agent.wallet.balance -= price;
+    agent.wallet.transactions.push({
+      type: 'debit',
+      amount: price,
+      description: `Payment for booking ${booking.bookingNumber}`,
+      booking: booking._id
+    });
     await agent.save();
 
     res.status(201).json({
       success: true,
-      message: 'Booking created successfully',
+      message: 'Booking confirmed and seat reserved!',
       data: booking
     });
   } catch (error) {
