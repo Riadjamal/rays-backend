@@ -29,6 +29,9 @@ router.put('/agents/:id/reject', adminController.rejectAgent);
 // GET /api/admin/drivers - Get all drivers
 router.get('/drivers', adminController.getDrivers);
 
+// POST /api/admin/drivers - Create new driver
+router.post('/drivers', adminController.createDriver);
+
 // GET /api/admin/bookings - Get all bookings
 router.get('/bookings', adminController.getBookings);
 

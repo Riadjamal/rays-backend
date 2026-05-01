@@ -126,6 +126,43 @@ exports.getDrivers = async (req, res, next) => {
   }
 };
 
+// Create new driver
+exports.createDriver = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, licenseNumber, licenseExpiry } = req.body;
+
+    const existingDriver = await Driver.findOne({ $or: [{ email }, { phone }] });
+    if (existingDriver) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver with this email or phone already exists'
+      });
+    }
+
+    const driver = await Driver.create({
+      name,
+      email,
+      phone,
+      password,
+      licenseNumber,
+      licenseExpiry
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Driver created successfully',
+      data: {
+        _id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Reject agent
 exports.rejectAgent = async (req, res, next) => {
   try {
