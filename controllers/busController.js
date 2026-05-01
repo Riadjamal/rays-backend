@@ -79,7 +79,10 @@ exports.updateBus = async (req, res, next) => {
     const { busNumber, name, capacity, seatLayout, route, driver, isActive } = req.body;
     
     const bus = await Bus.findById(req.params.id);
-    
+    if (!bus) return res.status(404).json({ success: false, message: 'Bus not found' });
+
+    const oldDriver = bus.driver;
+
     if (busNumber) bus.busNumber = busNumber;
     if (name) bus.name = name;
     if (capacity) bus.capacity = capacity;
@@ -89,6 +92,14 @@ exports.updateBus = async (req, res, next) => {
     if (isActive !== undefined) bus.isActive = isActive;
     
     await bus.save();
+
+    // Sync Driver relations
+    if (driver && oldDriver?.toString() !== driver.toString()) {
+      if (oldDriver) {
+        await Driver.findByIdAndUpdate(oldDriver, { $pull: { assignedBuses: bus._id } });
+      }
+      await Driver.findByIdAndUpdate(driver, { $addToSet: { assignedBuses: bus._id } });
+    }
     
     res.json({
       success: true,

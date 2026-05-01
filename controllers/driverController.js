@@ -2,6 +2,40 @@ const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const Bus = require('../models/Bus');
 
+// Get driver dashboard data
+exports.getDashboard = async (req, res, next) => {
+  try {
+    const driver = await Driver.findById(req.userId).populate('assignedBuses');
+    
+    // Get stats
+    const totalBuses = driver.assignedBuses.length;
+    
+    // Get today's trips
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayBookings = await Booking.find({
+      bus: { $in: driver.assignedBuses },
+      travelDate: { $gte: today, $lt: tomorrow },
+      status: { $in: ['confirmed', 'processing'] }
+    }).populate('user', 'name').populate('bus', 'busNumber');
+
+    res.json({
+      success: true,
+      data: {
+        totalBuses,
+        todayTripsCount: todayBookings.length,
+        assignedBuses: driver.assignedBuses,
+        todayTrips: todayBookings
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get driver profile
 exports.getProfile = async (req, res, next) => {
   try {
