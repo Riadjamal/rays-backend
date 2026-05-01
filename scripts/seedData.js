@@ -45,7 +45,7 @@ const seedData = async () => {
             companyName: 'TravelWay LLC',
             contactPerson: 'Zaid Khan',
             email: 'agent@rays.com',
-            phone: '+971 50 123 4567',
+            phone: '+91 98765 43210',
             password: 'password123',
             isApproved: true,
             wallet: {
@@ -59,7 +59,7 @@ const seedData = async () => {
         const driver = await Driver.create({
             name: 'Ahmed Abdullah',
             email: 'driver@rays.com',
-            phone: '+971 55 987 6543',
+            phone: '+91 91234 56789',
             password: 'password123',
             licenseNumber: 'UAE-998877',
             licenseExpiry: new Date('2030-12-31'),
@@ -71,7 +71,7 @@ const seedData = async () => {
         const user = await User.create({
             name: 'Mohammed Ali',
             email: 'user@rays.com',
-            phone: '+971 52 555 0000',
+            phone: '+91 99887 76655',
             password: 'password123'
         });
 
