@@ -170,11 +170,17 @@ exports.createBooking = async (req, res, next) => {
     }
 
     const booking = await Booking.create({
+      bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
       user: user._id,
       agent: agent._id,
       travelDate,
       location,
       productType,
+      passengerName: customerName,
+      passportDetails: {
+        number: passportNumber,
+        expiryDate: passportExpiry
+      },
       documents,
       status: 'pending'
     });
