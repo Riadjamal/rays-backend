@@ -9,7 +9,14 @@ const nodemailer = require('nodemailer');
 // Create booking
 exports.createBooking = async (req, res, next) => {
   try {
-    const { bus, travelDate, passengerName, passportNumber, nationality, seat, location, productType, isReturn } = req.body;
+    const { 
+      bus, travelDate, passengerName, 
+      firstName, lastName, dateOfBirth,
+      passportNumber, nationality, 
+      seat, location, productType, isReturn, 
+      paymentMethod, bankSlip,
+      passportFile, photoFile, uaeVisaFile, razorpay_payment_id
+    } = req.body;
 
     // 1. Find the bus
     const busDoc = await Bus.findById(bus);
@@ -45,17 +52,47 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3. Create the booking
+    const isVisaRequired = productType?.includes('oman_uae');
+
+    // Determine location from bus route or default to SHJ
+    let bookingLocation = location;
+    if (!bookingLocation) {
+      const route = (busDoc.route || '').toLowerCase();
+      if (route.includes('dubai') || route.includes('dxb')) {
+        bookingLocation = 'DXB';
+      } else {
+        bookingLocation = 'SHJ';
+      }
+    }
+
+    // Generate bookingNumber here to avoid Mongoose validation timing issue
+    const ts = Date.now().toString(36);
+    const rnd = Math.random().toString(36).substr(2, 5);
+    const generatedBookingNumber = `BK-${ts.toUpperCase()}-${rnd.toUpperCase()}`;
+
     const booking = await Booking.create({
+      bookingNumber: generatedBookingNumber,
       user: req.userId,
       bus,
       travelDate,
+      firstName: firstName || passengerName?.split(' ')[0],
+      lastName: lastName || passengerName?.split(' ').slice(1).join(' '),
       passengerName,
+      dateOfBirth,
       passportDetails: { number: passportNumber, nationality },
-      location: location || busDoc.route,
-      productType: productType || (isReturn ? 'with_uae_visa' : 'without_uae_visa'),
-      status: 'pending',
-      totalAmount: busDoc.price || 150,
-      isReturnTrip: isReturn || false
+      location: bookingLocation,
+      productType: productType || (isReturn ? 'oman_uae_30' : 'standard_transfer'),
+      status: isVisaRequired ? 'processing' : (paymentMethod === 'card' ? 'confirmed' : 'pending'),
+      totalAmount: (busDoc.price || 150) + 7.5,
+      isReturnTrip: isReturn || false,
+      paymentMethod: paymentMethod || 'card',
+      bankSlip: bankSlip || null,
+      documents: {
+          passport: passportFile,
+          photo: photoFile,
+          currentVisa: uaeVisaFile
+      },
+      paymentId: razorpay_payment_id
     });
 
     // 4. Create seat record
@@ -71,8 +108,23 @@ exports.createBooking = async (req, res, next) => {
       booking: booking._id
     });
 
-    // 5. Link seat back to booking
+    // 5. Create Visa Application Record (Required for Oman Trip)
+    let visaDoc = null;
+    if (isVisaRequired) {
+        const Visa = require('../models/Visa');
+        visaDoc = await Visa.create({
+            booking: booking._id,
+            status: 'pending',
+            visaType: 'OMAN',
+            appliedDate: new Date()
+        });
+        booking.visa = visaDoc._id;
+        await booking.save();
+    }
+
+    // 6. Link seat back to booking
     booking.seat = seatDoc._id;
+    if (isVisaRequired && visaDoc) booking.visa = visaDoc._id;
     await booking.save();
 
     // 6. Add to user's bookings
@@ -80,9 +132,18 @@ exports.createBooking = async (req, res, next) => {
       $push: { bookings: booking._id }
     });
 
-    // 6. Send notification
+    // 7. Send notification to User
+    const { sendNotification } = require('../controllers/notificationController');
     await sendNotification(req.userId, 'User', 'booking_confirmation',
       `Your booking ${booking.bookingNumber} has been created successfully`);
+
+    // 8. Send notification to Admin (All Admins)
+    const Admin = require('../models/Admin');
+    const admins = await Admin.find({});
+    for (const admin of admins) {
+        await sendNotification(admin._id, 'Admin', 'admin_alert', 
+            `New booking received: ${booking.bookingNumber} from ${passengerName}`);
+    }
 
     res.status(201).json({
       success: true,
@@ -105,7 +166,10 @@ exports.getAllBookings = async (req, res, next) => {
       .populate('user', 'name email phone')
       .populate('agent', 'companyName email phone')
       .populate('visa')
-      .populate('bus')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver', select: 'name phone' }
+      })
       .populate('seat')
       .populate('payment')
       .sort({ createdAt: -1 })
@@ -135,7 +199,10 @@ exports.getBookingById = async (req, res, next) => {
       .populate('user')
       .populate('agent')
       .populate('visa')
-      .populate('bus')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver', select: 'name phone' }
+      })
       .populate('seat')
       .populate('payment');
 
@@ -276,6 +343,61 @@ exports.getUnassignedBookings = async (req, res, next) => {
   }
 };
 
+// Manage Booking - Get by Number (Internal/Agent)
+exports.getBookingByNumber = async (req, res, next) => {
+  try {
+    const { bookingNumber } = req.params;
+    const booking = await Booking.findOne({ bookingNumber })
+      .populate('user', 'name email phone')
+      .populate('agent', 'companyName email phone')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver', select: 'name phone' }
+      })
+      .populate('seat');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    res.json({ success: true, data: booking });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Reschedule Request
+exports.requestReschedule = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { newDate } = req.body;
+
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    booking.rescheduleRequest = {
+      requestedDate: newDate,
+      status: 'pending',
+      requestedAt: new Date()
+    };
+    
+    await booking.save();
+
+    // Notify Admin
+    const { sendNotification } = require('./notificationController');
+    const Admin = require('../models/Admin');
+    const admins = await Admin.find({});
+    for (const admin of admins) {
+        await sendNotification(admin._id, 'Admin', 'admin_alert', 
+            `Reschedule request for ${booking.bookingNumber} to ${new Date(newDate).toLocaleDateString()}`);
+    }
+
+    res.json({ success: true, message: 'Reschedule request submitted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Track booking (public)
 exports.trackBooking = async (req, res, next) => {
   try {
@@ -283,7 +405,10 @@ exports.trackBooking = async (req, res, next) => {
     
     const booking = await Booking.findOne({ bookingNumber: pnr })
       .populate('user', 'name email')
-      .populate('bus')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver', select: 'name phone' }
+      })
       .populate('seat')
       .populate('visa');
 

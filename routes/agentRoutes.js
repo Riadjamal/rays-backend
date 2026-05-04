@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const agentController = require('../controllers/agentController');
 const auth = require('../middleware/auth');
-const authorize = require('../middleware/roleMiddleware');
+const { authorize } = require('../middleware/roleMiddleware');
 
 // All routes require authentication and agent role
 router.use(auth);
@@ -37,5 +37,11 @@ router.get('/bookings/:id', agentController.getBookingById);
 
 // PUT /api/agent/bookings/:id/cancel - Cancel booking
 router.put('/bookings/:id/cancel', agentController.cancelBooking);
+
+// PUT /api/agent/bookings/:id/update - Update booking (date/bus change)
+router.put('/bookings/:id/update', agentController.updateBooking);
+
+// POST /api/agent/refund-request - Request refund
+router.post('/refund-request', agentController.requestRefund);
 
 module.exports = router;

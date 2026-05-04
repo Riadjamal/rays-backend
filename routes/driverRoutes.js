@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const driverController = require('../controllers/driverController');
 const auth = require('../middleware/auth');
-const authorize = require('../middleware/roleMiddleware');
+const { authorize } = require('../middleware/roleMiddleware');
 
 // All routes require authentication and driver role
 router.use(auth);
@@ -28,6 +28,9 @@ router.get('/route', driverController.getRouteDetails);
 
 // POST /api/driver/check-in - Mark passenger as boarded
 router.post('/check-in', driverController.checkInPassenger);
+
+// POST /api/driver/start-trip - Start the trip
+router.post('/start-trip', driverController.startTrip);
 
 // GET /api/driver/notifications - Get driver notifications
 router.get('/notifications', driverController.getNotifications);

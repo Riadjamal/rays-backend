@@ -28,10 +28,16 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     default: 'user',
-    enum: ['user']
+    enum: ['user', 'admin', 'sales', 'operations', 'finance', 'driver']
+  },
+  permissions: {
+    type: [String],
+    default: []
   },
   passportDetails: {
     number: String,
+    nationality: String,
+    dob: Date,
     expiryDate: Date,
     photo: String
   },
@@ -63,6 +69,8 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  resetPasswordOTP: String,
+  resetPasswordOTPExpires: Date,
   createdAt: {
     type: Date,
     default: Date.now
@@ -76,7 +84,7 @@ const userSchema = new mongoose.Schema({
 // Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
-    next();
+    return next();
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

@@ -46,6 +46,11 @@ const busSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  price: {
+    type: Number,
+    required: [true, 'Bus ticket price is required'],
+    default: 150
+  },
   createdAt: {
     type: Date,
     default: Date.now

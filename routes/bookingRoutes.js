@@ -30,4 +30,10 @@ router.put('/:id/status', bookingController.updateBookingStatus);
 // PUT /api/bookings/:id/cancel - Cancel booking
 router.put('/:id/cancel', bookingController.cancelBooking);
 
+// GET /api/bookings/manage/:bookingNumber - Get booking by PNR for management
+router.get('/manage/:bookingNumber', bookingController.getBookingByNumber);
+
+// POST /api/bookings/:id/reschedule-request - Request reschedule
+router.post('/:id/reschedule-request', bookingController.requestReschedule);
+
 module.exports = router;

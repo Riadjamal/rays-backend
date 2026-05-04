@@ -18,6 +18,7 @@ const userRoutes = require('./routes/userRoutes');
 const agentRoutes = require('./routes/agentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const driverRoutes = require('./routes/driverRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const visaRoutes = require('./routes/visaRoutes');
 const busRoutes = require('./routes/busRoutes');
@@ -36,8 +37,28 @@ connectDatabase();
 
 // Middleware
 app.use(helmet()); // Security headers
+
+// CORS - allow both local and production frontend
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:3000',
+  'http://localhost:3002',
+  'https://rays-international-bus-frontend.vercel.app',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(o => origin.startsWith(o))) {
+      return callback(null, true);
+    }
+    // Allow any vercel.app subdomain for preview deployments
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -67,6 +88,8 @@ app.use('/api/buses', busRoutes);
 app.use('/api/seats', seatRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/settings', require('./routes/settingRoutes'));
+app.use('/api', uploadRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -75,6 +98,10 @@ app.get('/api/health', (req, res) => {
     message: 'Server is running',
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/test-upload', (req, res) => {
+  res.json({ success: true, message: 'Direct test route is working!' });
 });
 
 // 404 handler

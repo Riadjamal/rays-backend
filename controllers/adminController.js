@@ -4,39 +4,64 @@ const Booking = require('../models/Booking');
 const Bus = require('../models/Bus');
 const Driver = require('../models/Driver');
 const Payment = require('../models/Payment');
+const mailer = require('../utils/mailer');
+const crypto = require('crypto');
 
 // Dashboard stats
 exports.getDashboard = async (req, res, next) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const totalAgents = await Agent.countDocuments();
-    const pendingAgents = await Agent.countDocuments({ isApproved: false });
-    const totalBookings = await Booking.countDocuments();
-    const pendingBookings = await Booking.countDocuments({ status: 'pending' });
-    const totalBuses = await Bus.countDocuments({ isActive: true });
+    const totalUsers = await User.countDocuments() || 0;
+    const totalAgents = await Agent.countDocuments() || 0;
+    const totalBookings = await Booking.countDocuments() || 0;
+    const pendingBookings = await Booking.countDocuments({ status: 'pending' }) || 0;
+    const totalBuses = await Bus.countDocuments({ isActive: true }) || 0;
+    
+    const RefundRequest = require('../models/RefundRequest');
+    const pendingRefunds = await RefundRequest.countDocuments({ status: 'pending' }) || 0;
+    const pendingReschedules = await Booking.countDocuments({ "rescheduleRequest.status": 'pending' }) || 0;
 
-    // Analytics data for charts
-    const analyticsData = [
-      { name: 'Jan', revenue: 4000, bookings: 24 },
-      { name: 'Feb', revenue: 3000, bookings: 18 },
-      { name: 'Mar', revenue: 5000, bookings: 30 },
-      { name: 'Apr', revenue: 4500, bookings: 27 },
-      { name: 'May', revenue: 6000, bookings: 36 },
-      { name: 'Jun', revenue: 5500, bookings: 33 },
-      { name: 'Jul', revenue: 7000, bookings: 42 }
-    ];
+    let totalRevenue = 0;
+    let analyticsData = [];
+
+    try {
+        const revenueResult = await Booking.aggregate([
+            { $match: { status: { $ne: 'cancelled' } } },
+            { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]);
+        totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+        analyticsData = await Booking.aggregate([
+            { $match: { status: { $ne: 'cancelled' }, createdAt: { $exists: true } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    revenue: { $sum: "$totalAmount" },
+                    bookings: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } },
+            { $limit: 7 }
+        ]);
+    } catch (aggErr) {
+        console.error("Aggregation Error:", aggErr);
+    }
 
     res.json({
       success: true,
       data: {
         users: totalUsers,
         agents: totalAgents,
-        pendingAgents,
         bookings: totalBookings,
         pendingBookings,
         totalBuses,
-        revenue: 45200, // Aggregate this properly in real scenario
-        analyticsData
+        pendingRefunds,
+        pendingReschedules,
+        revenue: totalRevenue,
+        analyticsData: analyticsData.map(d => ({
+            name: d._id,
+            revenue: d.revenue,
+            bookings: d.bookings
+        })) || []
       }
     });
   } catch (error) {
@@ -70,6 +95,70 @@ exports.blockUser = async (req, res, next) => {
     res.json({
       success: true,
       message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Create new internal user
+exports.createUser = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, role } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role,
+      permissions: req.body.permissions || []
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Internal user created successfully',
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update user permissions
+exports.updateUserPermissions = async (req, res, next) => {
+  try {
+    const { permissions } = req.body;
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.permissions = permissions;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Permissions updated successfully',
       data: user
     });
   } catch (error) {
@@ -113,7 +202,7 @@ exports.approveAgent = async (req, res, next) => {
 // Create new agent
 exports.createAgent = async (req, res, next) => {
   try {
-    const { companyName, contactPerson, email, phone, password, companyDetails } = req.body;
+    const { companyName, contactPerson, email, phone, companyDetails } = req.body;
 
     const existingAgent = await Agent.findOne({ email });
     if (existingAgent) {
@@ -123,19 +212,30 @@ exports.createAgent = async (req, res, next) => {
       });
     }
 
+    // Generate random setup token
+    const setupToken = crypto.randomBytes(32).toString('hex');
+
     const agent = await Agent.create({
       companyName,
       contactPerson,
       email,
       phone,
-      password,
       companyDetails,
-      isApproved: true // Manually created agents are approved by default
+      setupPasswordToken: setupToken,
+      setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000, // 48 hours
+      isApproved: true
+    });
+
+    // Send actual invitation email
+    await mailer.sendAgentInvitation(email, {
+        companyName,
+        contactPerson,
+        token: setupToken
     });
 
     res.status(201).json({
       success: true,
-      message: 'Agent created successfully',
+      message: 'Agent created successfully. Invitation email sent.',
       data: agent
     });
   } catch (error) {
@@ -196,16 +296,19 @@ exports.createDriver = async (req, res, next) => {
   }
 };
 
-// Reject agent
+// Reject/Block agent
 exports.rejectAgent = async (req, res, next) => {
   try {
     const agent = await Agent.findById(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });
+    
     agent.isBlocked = true;
+    agent.isApproved = false; // Also unapprove them
     await agent.save();
 
     res.json({
       success: true,
-      message: 'Agent rejected successfully',
+      message: 'Agent blocked and rejected successfully',
       data: agent
     });
   } catch (error) {
@@ -213,12 +316,57 @@ exports.rejectAgent = async (req, res, next) => {
   }
 };
 
-// Get all bookings
+// Delete agent
+exports.deleteAgent = async (req, res, next) => {
+  try {
+    console.log(`[Admin] Permanent deletion requested for agent ID: ${req.params.id}`);
+    const agent = await Agent.findByIdAndDelete(req.params.id);
+    if (!agent) {
+      console.warn(`[Admin] Delete failed: Agent ${req.params.id} not found`);
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    console.log(`[Admin] Successfully deleted agent: ${agent.companyName} (${agent.email})`);
+    res.json({
+      success: true,
+      message: 'Agent deleted permanently'
+    });
+  } catch (error) {
+    console.error(`[Admin] Error deleting agent ${req.params.id}:`, error);
+    next(error);
+  }
+};
+
+// Get all bookings with filters
 exports.getBookings = async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, source, startDate, endDate, search, page = 1, limit = 20 } = req.query;
 
-    const query = status ? { status } : {};
+    let query = {};
+
+    if (status) query.status = status;
+    
+    if (source === 'agent') {
+        query.agent = { $exists: true };
+    } else if (source === 'user') {
+        query.agent = { $exists: false };
+    }
+
+    if (startDate || endDate) {
+        query.travelDate = {};
+        if (startDate) query.travelDate.$gte = new Date(startDate);
+        if (endDate) query.travelDate.$lte = new Date(endDate);
+    }
+
+    if (search) {
+        query.$or = [
+            { bookingNumber: { $regex: search, $options: 'i' } },
+            { firstName: { $regex: search, $options: 'i' } },
+            { lastName: { $regex: search, $options: 'i' } },
+            { passengerName: { $regex: search, $options: 'i' } },
+            { "passportDetails.number": { $regex: search, $options: 'i' } }
+        ];
+    }
 
     const bookings = await Booking.find(query)
       .populate('user', 'name email phone')
@@ -252,9 +400,36 @@ exports.updateBookingStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
 
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findById(req.params.id).populate('user', 'name email').populate('agent', 'companyName email');
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const previousStatus = booking.status;
     booking.status = status;
     await booking.save();
+
+    // Send notification to user/agent when status changes
+    const { sendNotification } = require('./notificationController');
+
+    const statusMessages = {
+      confirmed: `✅ Your booking ${booking.bookingNumber} has been approved and confirmed!`,
+      processing: `🔄 Your booking ${booking.bookingNumber} is now being processed.`,
+      cancelled: `❌ Your booking ${booking.bookingNumber} has been cancelled.`,
+      pending: `⏳ Your booking ${booking.bookingNumber} status has been updated to pending.`
+    };
+
+    const notificationMessage = statusMessages[status] || `Your booking ${booking.bookingNumber} status updated to ${status}.`;
+
+    // Notify the user who made the booking
+    if (booking.user) {
+      await sendNotification(booking.user._id, 'User', 'booking_confirmation', notificationMessage);
+    }
+
+    // Notify the agent if booking was made by an agent
+    if (booking.agent) {
+      await sendNotification(booking.agent._id, 'Agent', 'booking_confirmation', notificationMessage);
+    }
 
     res.json({
       success: true,
@@ -339,6 +514,111 @@ exports.deductWalletBalance = async (req, res, next) => {
       data: {
         balance: agent.wallet.balance
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get all refund requests
+exports.getRefunds = async (req, res, next) => {
+  try {
+    const RefundRequest = require('../models/RefundRequest');
+    const refunds = await RefundRequest.find()
+      .populate('agent', 'companyName email phone')
+      .populate('processedBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: refunds
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Process refund request (approve/reject)
+exports.processRefund = async (req, res, next) => {
+  try {
+    const { status, transferSlip, rejectionReason } = req.body;
+    const RefundRequest = require('../models/RefundRequest');
+    
+    const refund = await RefundRequest.findById(req.params.id).populate('agent');
+    
+    if (!refund) {
+      return res.status(404).json({
+        success: false,
+        message: 'Refund request not found'
+      });
+    }
+
+    if (refund.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Refund request already processed'
+      });
+    }
+
+    refund.status = status;
+    refund.processedBy = req.userId;
+    
+    if (status === 'approved') {
+      refund.transferSlip = transferSlip;
+      
+      // Deduct from agent wallet
+      const agent = await Agent.findById(refund.agent._id);
+      agent.wallet.balance -= refund.amount;
+      agent.wallet.transactions.push({
+        type: 'debit',
+        amount: refund.amount,
+        description: `Refund processed - AED ${refund.amount} transferred to bank`
+      });
+      await agent.save();
+
+      // Send approval email
+      await mailer.sendMail({
+        to: refund.agent.email,
+        subject: 'Refund Request Approved - Rays International',
+        html: `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: #10b981;">Refund Approved</h2>
+            <p>Dear ${refund.agent.companyName},</p>
+            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been approved and processed.</p>
+            <p>The amount has been transferred to your registered bank account.</p>
+            <p>Thank you for your business!</p>
+            <hr />
+            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+          </div>
+        `
+      });
+    } else if (status === 'rejected') {
+      refund.rejectionReason = rejectionReason;
+      
+      // Send rejection email
+      await mailer.sendMail({
+        to: refund.agent.email,
+        subject: 'Refund Request Rejected - Rays International',
+        html: `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: #ef4444;">Refund Request Rejected</h2>
+            <p>Dear ${refund.agent.companyName},</p>
+            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been rejected.</p>
+            <p><strong>Reason:</strong> ${rejectionReason}</p>
+            <p>If you have any questions, please contact our finance team.</p>
+            <hr />
+            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+          </div>
+        `
+      });
+    }
+
+    await refund.save();
+
+    res.json({
+      success: true,
+      message: `Refund ${status} successfully`,
+      data: refund
     });
   } catch (error) {
     next(error);

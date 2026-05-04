@@ -89,9 +89,32 @@ exports.approveVisa = async (req, res, next) => {
     await visa.save();
 
     // Update booking status
-    await Booking.findByIdAndUpdate(visa.booking, {
+    const booking = await Booking.findByIdAndUpdate(visa.booking, {
       status: 'confirmed'
-    });
+    }, { new: true }).populate('agent').populate('user');
+
+    // Notify Agent/User
+    try {
+        const { sendNotification } = require('./notificationController');
+        const targetId = booking.agent ? booking.agent._id : (booking.user ? booking.user._id : null);
+        const targetModel = booking.agent ? 'Agent' : 'User';
+        
+        if (targetId) {
+            await sendNotification(targetId, targetModel, 'visa_approval', 
+                `GREAT NEWS! Visa for booking ${booking.bookingNumber} (${booking.passengerName}) has been APPROVED.`);
+        }
+
+        // Send Email
+        if (booking.user?.email || booking.agent?.email) {
+            const { sendVisaApproved } = require('../utils/mailer');
+            await sendVisaApproved(booking.agent?.email || booking.user.email, {
+                bookingNumber: booking.bookingNumber,
+                passengerName: booking.passengerName
+            });
+        }
+    } catch (notifErr) {
+        console.error("Notification error:", notifErr);
+    }
 
     res.json({
       success: true,
@@ -113,10 +136,24 @@ exports.rejectVisa = async (req, res, next) => {
     visa.notes = notes;
     await visa.save();
 
-    // Update booking status
-    await Booking.findByIdAndUpdate(visa.booking, {
-      status: 'pending'
-    });
+    // Update booking status to cancelled
+    const booking = await Booking.findByIdAndUpdate(visa.booking, {
+      status: 'cancelled'
+    }, { new: true }).populate('agent').populate('user');
+
+    // Notify Agent/User
+    try {
+        const { sendNotification } = require('./notificationController');
+        const targetId = booking.agent ? booking.agent._id : (booking.user ? booking.user._id : null);
+        const targetModel = booking.agent ? 'Agent' : 'User';
+        
+        if (targetId) {
+            await sendNotification(targetId, targetModel, 'visa_rejection', 
+                `ALERT: Visa for booking ${booking.bookingNumber} has been REJECTED. Reason: ${notes || 'Contact support'}`);
+        }
+    } catch (notifErr) {
+        console.error("Notification error:", notifErr);
+    }
 
     res.json({
       success: true,
@@ -164,16 +201,50 @@ exports.updateVisaStatus = async (req, res, next) => {
     if (notes) visa.notes = notes;
     if (visaDocument) visa.visaDocument = visaDocument;
 
+    // Synchronize status with the parent Booking
+    let bookingStatus = 'processing';
     if (status === 'approved') {
-      visa.approvedDate = new Date();
-      await Booking.findByIdAndUpdate(visa.booking, { status: 'confirmed' });
+        visa.approvedDate = new Date();
+        bookingStatus = 'confirmed';
     } else if (status === 'rejected') {
-      await Booking.findByIdAndUpdate(visa.booking, { status: 'pending' });
-    } else if (status === 'processing') {
-      await Booking.findByIdAndUpdate(visa.booking, { status: 'processing' });
+        bookingStatus = 'pending';
+    } else if (status === 'pending') {
+        bookingStatus = 'pending';
+    }
+
+    const updatedBooking = await Booking.findByIdAndUpdate(visa.booking, { status: bookingStatus }, { new: true });
+    
+    if (!updatedBooking) {
+        console.error(`Failed to find/update booking ${visa.booking} for visa ${visa._id}`);
     }
 
     await visa.save();
+
+    // Notify User/Agent
+    const booking = await Booking.findById(visa.booking).populate('user').populate('agent');
+    
+    if (booking) {
+        try {
+            const { sendNotification } = require('./notificationController');
+            const targetId = booking.agent ? booking.agent._id : (booking.user ? booking.user._id : null);
+            const targetModel = booking.agent ? 'Agent' : 'User';
+            
+            if (targetId) {
+                await sendNotification(targetId, targetModel, 'visa_approval', 
+                    `Visa for booking ${booking.bookingNumber} is now ${status}`);
+            }
+
+            if (status === 'approved' && booking.user?.email) {
+                const { sendVisaApproved } = require('../utils/mailer');
+                await sendVisaApproved(booking.user.email, {
+                    bookingNumber: booking.bookingNumber,
+                    passengerName: `${booking.firstName} ${booking.lastName}` || booking.passengerName
+                });
+            }
+        } catch (notifErr) {
+            console.error("Notification/Email error in updateVisaStatus:", notifErr);
+        }
+    }
 
     res.json({
       success: true,

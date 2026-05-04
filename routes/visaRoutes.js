@@ -2,31 +2,31 @@ const express = require('express');
 const router = express.Router();
 const visaController = require('../controllers/visaController');
 const auth = require('../middleware/auth');
-const authorize = require('../middleware/roleMiddleware');
+const { authorize, checkPermission } = require('../middleware/roleMiddleware');
 
 // All routes require authentication
 router.use(auth);
 
-// GET /api/visas/pending - Get pending visas (admin only)
-router.get('/pending', auth, authorize('admin'), visaController.getPendingVisas);
+// GET /api/visas/pending - Get pending visas
+router.get('/pending', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.getPendingVisas);
 
 // GET /api/visas - Get all visas
-router.get('/', visaController.getAllVisas);
+router.get('/', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.getAllVisas);
 
-// POST /api/visas/apply - Apply for visa (admin only)
-router.post('/apply', auth, authorize('admin'), visaController.applyVisa);
+// POST /api/visas/apply - Apply for visa
+router.post('/apply', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.applyVisa);
 
-// PUT /api/visas/:id/approve - Approve visa (admin only)
-router.put('/:id/approve', auth, authorize('admin'), visaController.approveVisa);
+// PUT /api/visas/:id/approve - Approve visa
+router.put('/:id/approve', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.approveVisa);
 
-// PUT /api/visas/:id/reject - Reject visa (admin only)
-router.put('/:id/reject', auth, authorize('admin'), visaController.rejectVisa);
+// PUT /api/visas/:id/reject - Reject visa
+router.put('/:id/reject', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.rejectVisa);
 
 // GET /api/visas/stats - Get visa statistics
-router.get('/stats', auth, authorize('admin'), visaController.getVisaStats);
+router.get('/stats', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.getVisaStats);
 
-// PUT /api/visas/:id/status - Update visa status (generic)
-router.put('/:id/status', auth, authorize('admin'), visaController.updateVisaStatus);
+// PUT /api/visas/:id/status - Update visa status
+router.put('/:id/status', authorize('admin', 'sales', 'operations', 'finance'), checkPermission('visa'), visaController.updateVisaStatus);
 
 // GET /api/visas/booking/:bookingId - Get visa by booking
 router.get('/booking/:bookingId', visaController.getVisaByBooking);

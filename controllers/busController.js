@@ -1,10 +1,11 @@
 const Bus = require('../models/Bus');
 const Driver = require('../models/Driver');
+const { sendNotification } = require('./notificationController');
 
 // Create bus
 exports.createBus = async (req, res, next) => {
   try {
-    const { busNumber, name, capacity, seatLayout, route, driver } = req.body;
+    const { busNumber, name, capacity, seatLayout, route, driver, price } = req.body;
     
     const bus = await Bus.create({
       busNumber,
@@ -12,11 +13,13 @@ exports.createBus = async (req, res, next) => {
       capacity,
       seatLayout,
       route,
-      driver
+      driver,
+      price
     });
 
     if (driver) {
       await Driver.findByIdAndUpdate(driver, { $addToSet: { assignedBuses: bus._id } });
+      await sendNotification(driver, 'Driver', 'system_alert', `You have been assigned to a new bus: ${bus.busNumber} (${bus.name})`);
     }
     
     res.status(201).json({
@@ -76,7 +79,7 @@ exports.getBusById = async (req, res, next) => {
 // Update bus
 exports.updateBus = async (req, res, next) => {
   try {
-    const { busNumber, name, capacity, seatLayout, route, driver, isActive } = req.body;
+    const { busNumber, name, capacity, seatLayout, route, driver, isActive, price } = req.body;
     
     const bus = await Bus.findById(req.params.id);
     if (!bus) return res.status(404).json({ success: false, message: 'Bus not found' });
@@ -90,6 +93,7 @@ exports.updateBus = async (req, res, next) => {
     if (route) bus.route = route;
     if (driver) bus.driver = driver;
     if (isActive !== undefined) bus.isActive = isActive;
+    if (price !== undefined) bus.price = price;
     
     await bus.save();
 
@@ -97,8 +101,10 @@ exports.updateBus = async (req, res, next) => {
     if (driver && oldDriver?.toString() !== driver.toString()) {
       if (oldDriver) {
         await Driver.findByIdAndUpdate(oldDriver, { $pull: { assignedBuses: bus._id } });
+        // Optional: notify old driver they were unassigned? 
       }
       await Driver.findByIdAndUpdate(driver, { $addToSet: { assignedBuses: bus._id } });
+      await sendNotification(driver, 'Driver', 'system_alert', `You have been assigned to bus: ${bus.busNumber} (${bus.name})`);
     }
     
     res.json({
@@ -149,6 +155,7 @@ exports.assignDriver = async (req, res, next) => {
     }
     if (driverId) {
       await Driver.findByIdAndUpdate(driverId, { $addToSet: { assignedBuses: bus._id } });
+      await sendNotification(driverId, 'Driver', 'system_alert', `You have been assigned to bus: ${bus.busNumber} (${bus.name})`);
     }
     
     res.json({

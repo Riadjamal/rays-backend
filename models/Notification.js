@@ -9,12 +9,12 @@ const notificationSchema = new mongoose.Schema({
   userModel: {
     type: String,
     required: true,
-    enum: ['User', 'Agent', 'Driver']
+    enum: ['User', 'Agent', 'Driver', 'Admin']
   },
   type: {
     type: String,
     required: true,
-    enum: ['booking_confirmation', 'visa_approval', 'seat_confirmation', 'trip_reminder']
+    enum: ['booking_confirmation', 'visa_approval', 'seat_confirmation', 'trip_reminder', 'admin_alert']
   },
   message: {
     type: String,

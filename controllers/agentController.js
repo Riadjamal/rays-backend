@@ -137,7 +137,8 @@ exports.getWalletTransactions = async (req, res, next) => {
 exports.createBooking = async (req, res, next) => {
   try {
     const {
-      customerName,
+      firstName,
+      lastName,
       customerEmail,
       customerPhone,
       travelDate,
@@ -146,8 +147,12 @@ exports.createBooking = async (req, res, next) => {
       documents,
       passportNumber,
       passportExpiry,
+      nationality,
+      dateOfBirth,
       busId,
-      seatNumber
+      seatNumber,
+      row,
+      column
     } = req.body;
 
     const agent = await Agent.findById(req.userId);
@@ -156,8 +161,17 @@ exports.createBooking = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Agent account not approved' });
     }
 
-    // 1. Wallet Balance Check (Fixed price 50 AED for now or based on product)
-    const price = productType === 'with_uae_visa' ? 250 : 50; 
+    // 1. Wallet Balance Check
+    const pricingMap = {
+      'shj_visa_extension': 150,
+      'dxb_visa_extension': 160,
+      'standard_transfer': 50,
+      'return_transfer': 50,
+      'oman_uae_b2b_30': 150,
+      'oman_uae_b2b_60': 160
+    };
+    const price = pricingMap[productType] || 150; 
+    
     if (agent.wallet.balance < price) {
       return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
     }
@@ -166,15 +180,16 @@ exports.createBooking = async (req, res, next) => {
     let user = await User.findOne({ email: customerEmail });
     if (!user) {
       user = await User.create({
-        name: customerName,
+        name: `${firstName} ${lastName}`,
         email: customerEmail,
         phone: customerPhone,
         password: Math.random().toString(36).slice(-8),
-        passportDetails: { number: passportNumber, expiryDate: passportExpiry }
+        passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality, dob: dateOfBirth }
       });
     }
 
     // 3. Create Booking
+    const isVisaRequired = productType.includes('extension') || productType.includes('b2b');
     const booking = await Booking.create({
       bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
       user: user._id,
@@ -182,18 +197,37 @@ exports.createBooking = async (req, res, next) => {
       travelDate,
       location,
       productType,
-      passengerName: customerName,
-      passportDetails: { number: passportNumber, expiryDate: passportExpiry },
+      firstName,
+      lastName,
+      dateOfBirth,
+      passengerName: `${firstName} ${lastName}`,
+      passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality },
       documents,
       bus: busId,
-      status: 'confirmed' // Auto-confirm for agents since they pay via wallet
+      status: isVisaRequired ? 'processing' : 'confirmed',
+      totalAmount: price
     });
+
+    // 3a. Create Visa Application only if required
+    if (isVisaRequired) {
+        const Visa = require('../models/Visa');
+        const visa = await Visa.create({
+            booking: booking._id,
+            status: 'pending',
+            visaType: productType.includes('shj') ? 'SHJ' : productType.includes('dxb') ? 'DXB' : 'OMAN',
+            appliedDate: new Date()
+        });
+        booking.visa = visa._id;
+        await booking.save();
+    }
 
     // 4. Handle Seat Reservation
     if (seatNumber) {
         const seat = await Seat.create({
             bus: busId,
             seatNumber,
+            row,
+            column,
             tripDate: new Date(travelDate),
             isBooked: true,
             bookedBy: agent._id,
@@ -208,7 +242,7 @@ exports.createBooking = async (req, res, next) => {
         booking: booking._id,
         user: agent._id,
         amount: price,
-        paymentMethod: 'wallet',
+        type: 'wallet',
         status: 'completed',
         transactionId: `TXN-${Date.now().toString(36).toUpperCase()}`
     });
@@ -225,12 +259,29 @@ exports.createBooking = async (req, res, next) => {
     });
     await agent.save();
 
+    // 7. Notify User
+    const { sendBookingConfirmation } = require('../utils/mailer');
+    await sendBookingConfirmation(customerEmail, {
+        bookingNumber: booking.bookingNumber,
+        passengerName: customerName,
+        travelDate,
+        location
+    });
+
     res.status(201).json({
       success: true,
       message: 'Booking confirmed and seat reserved!',
       data: booking
     });
   } catch (error) {
+    console.error("Agent Booking Error Details:", error);
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Validation Error', 
+            errors: error.errors 
+        });
+    }
     next(error);
   }
 };
@@ -241,7 +292,10 @@ exports.getBookings = async (req, res, next) => {
     const bookings = await Booking.find({ agent: req.userId })
       .populate('user')
       .populate('visa')
-      .populate('bus')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver' }
+      })
       .populate('seat')
       .populate('payment')
       .sort({ createdAt: -1 });
@@ -264,7 +318,10 @@ exports.getBookingById = async (req, res, next) => {
     })
       .populate('user')
       .populate('visa')
-      .populate('bus')
+      .populate({
+        path: 'bus',
+        populate: { path: 'driver' }
+      })
       .populate('seat')
       .populate('payment');
 
@@ -290,7 +347,7 @@ exports.cancelBooking = async (req, res, next) => {
     const booking = await Booking.findOne({
       _id: req.params.id,
       agent: req.userId
-    });
+    }).populate('payment');
 
     if (!booking) {
       return res.status(404).json({
@@ -343,6 +400,91 @@ exports.cancelBooking = async (req, res, next) => {
       success: true,
       message: 'Booking cancelled successfully',
       data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update booking (date/bus change)
+exports.updateBooking = async (req, res, next) => {
+  try {
+    const { travelDate, location, busId } = req.body;
+    
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      agent: req.userId
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot update cancelled booking'
+      });
+    }
+
+    // Update fields
+    if (travelDate) booking.travelDate = travelDate;
+    if (location) booking.location = location;
+    if (busId) booking.bus = busId;
+
+    // Release old seat if bus/date changed
+    if (booking.seat && (busId || travelDate)) {
+      await Seat.findByIdAndDelete(booking.seat);
+      booking.seat = null;
+    }
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: 'Booking updated successfully. Please reassign seat if needed.',
+      data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Request refund from wallet
+exports.requestRefund = async (req, res, next) => {
+  try {
+    const { amount, reason } = req.body;
+    const agent = await Agent.findById(req.userId);
+
+    if (agent.wallet.balance < amount) {
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance for this refund amount' });
+    }
+
+    const RefundRequest = require('../models/RefundRequest');
+    const refund = await RefundRequest.create({
+      agent: req.userId,
+      amount,
+      reason,
+      status: 'pending'
+    });
+
+    // Notify Finance (Admins with finance role or all admins)
+    const { sendNotification } = require('./notificationController');
+    const User = require('../models/User');
+    const financeStaff = await User.find({ role: { $in: ['admin', 'finance'] } });
+    
+    for (const staff of financeStaff) {
+        await sendNotification(staff._id, 'User', 'finance_alert', 
+            `New Refund Request: AED ${amount} from ${agent.companyName}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Refund request submitted to Finance team',
+      data: refund
     });
   } catch (error) {
     next(error);

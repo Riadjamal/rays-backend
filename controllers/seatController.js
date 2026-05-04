@@ -223,27 +223,47 @@ exports.getSeatLayout = async (req, res, next) => {
 // Toggle block a seat (admin override)
 exports.toggleBlockSeat = async (req, res, next) => {
   try {
-    const { busId, seatNumber, tripDate, status } = req.body; // status: 'blocked' or 'available'
+    const { busId, seatNumber, tripDate, status } = req.body; 
+
+    const startOfDay = new Date(tripDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(tripDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
     if (status === 'available') {
-      // Find and delete the record (if it's just a block)
-      const seat = await Seat.findOne({ bus: busId, seatNumber, tripDate: new Date(tripDate) });
+      const seat = await Seat.findOne({ 
+        bus: busId, 
+        seatNumber, 
+        tripDate: { $gte: startOfDay, $lte: endOfDay } 
+      });
       if (seat && !seat.isBooked) {
         await seat.deleteOne();
         return res.json({ success: true, message: 'Seat released' });
       }
     } else {
-      // Block the seat
-      let seat = await Seat.findOne({ bus: busId, seatNumber, tripDate: new Date(tripDate) });
+      let seat = await Seat.findOne({ 
+        bus: busId, 
+        seatNumber, 
+        tripDate: { $gte: startOfDay, $lte: endOfDay } 
+      });
+
       if (seat) {
         if (seat.isBooked) return res.status(400).json({ success: false, message: 'Cannot block a booked seat' });
-        seat.isBooked = false;
+        seat.isBooked = false; 
         await seat.save();
       } else {
+        const bus = await Bus.findById(busId);
+        if (!bus) return res.status(404).json({ success: false, message: 'Bus not found' });
+
+        const seatConfig = bus.seatLayout.configuration.find(s => s.seatNumber === seatNumber);
+        if (!seatConfig) return res.status(400).json({ success: false, message: 'Invalid seat number' });
+        
         await Seat.create({
           bus: busId,
           seatNumber,
-          tripDate: new Date(tripDate),
+          row: seatConfig.row,
+          column: seatConfig.column,
+          tripDate: startOfDay,
           isBooked: false
         });
       }
@@ -253,26 +273,33 @@ exports.toggleBlockSeat = async (req, res, next) => {
     next(error);
   }
 };
+
 // Manual assign seat to booking (admin)
 exports.manualAssignSeat = async (req, res, next) => {
   try {
     const { busId, seatNumber, tripDate, bookingId } = req.body;
 
+    const startOfDay = new Date(tripDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(tripDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
     const booking = await Booking.findById(bookingId);
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    // Check if seat record already exists for this trip
-    let seat = await Seat.findOne({ bus: busId, seatNumber, tripDate: new Date(tripDate) });
+    let seat = await Seat.findOne({ 
+        bus: busId, 
+        seatNumber, 
+        tripDate: { $gte: startOfDay, $lte: endOfDay } 
+    });
     
-    // Find row/column from bus configuration
     const bus = await Bus.findById(busId);
     const seatConfig = bus.seatLayout.configuration.find(s => s.seatNumber === seatNumber);
 
     if (seat) {
       if (seat.isBooked) return res.status(400).json({ success: false, message: 'Seat already booked' });
-      // If it was blocked, we can unblock it and assign it
       seat.isBooked = true;
-      seat.bookedBy = booking.user || booking.agent; // Assign either user or agent
+      seat.bookedBy = booking.user || booking.agent;
       seat.booking = bookingId;
       await seat.save();
     } else {
@@ -281,22 +308,17 @@ exports.manualAssignSeat = async (req, res, next) => {
         seatNumber,
         row: seatConfig.row,
         column: seatConfig.column,
-        tripDate: new Date(tripDate),
+        tripDate: startOfDay,
         isBooked: true,
         bookedBy: booking.user || booking.agent,
         booking: bookingId
       });
     }
 
-    // Link seat to booking
     booking.seat = seat._id;
     await booking.save();
 
-    res.json({
-      success: true,
-      message: 'Seat assigned to booking successfully',
-      data: seat
-    });
+    res.json({ success: true, message: 'Seat assigned', data: seat });
   } catch (error) {
     next(error);
   }

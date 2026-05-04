@@ -17,8 +17,9 @@ const auth = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
+    const staffRoles = ['sales', 'operations', 'finance'];
     let user;
-    if (decoded.role === 'user') {
+    if (decoded.role === 'user' || staffRoles.includes(decoded.role)) {
       user = await User.findById(decoded.id);
     } else if (decoded.role === 'agent') {
       user = await Agent.findById(decoded.id);
@@ -45,6 +46,7 @@ const auth = async (req, res, next) => {
     req.user = user;
     req.userId = decoded.id;
     req.userRole = decoded.role;
+    req.userPermissions = user.permissions || [];
     next();
   } catch (error) {
     res.status(401).json({

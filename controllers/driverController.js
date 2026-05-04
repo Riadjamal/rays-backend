@@ -58,7 +58,7 @@ exports.getTrips = async (req, res, next) => {
 
     const trips = await Booking.find({
       bus: { $in: driver.assignedBuses },
-      status: { $in: ['confirmed', 'processing'] }
+      status: { $in: ['confirmed', 'processing', 'completed'] }
     })
       .populate('user', 'name phone')
       .populate('seat')
@@ -123,6 +123,12 @@ exports.getPassengerList = async (req, res, next) => {
 exports.getRouteDetails = async (req, res, next) => {
   try {
     const driver = await Driver.findById(req.userId);
+    if (!driver.assignedBuses || driver.assignedBuses.length === 0) {
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
     const bus = await Bus.findById(driver.assignedBuses[0]);
 
     res.json({
@@ -130,7 +136,10 @@ exports.getRouteDetails = async (req, res, next) => {
       data: {
         route: bus.route,
         busNumber: bus.busNumber,
-        busName: bus.name
+        busName: bus.name,
+        capacity: bus.capacity,
+        _id: bus._id,
+        bus: bus // Send full bus document for safety
       }
     });
   } catch (error) {
@@ -152,9 +161,8 @@ exports.checkInPassenger = async (req, res, next) => {
       });
     }
 
-    // Update booking status to show passenger boarded
-    booking.status = 'completed';
-    await booking.save();
+    // Update booking status to show passenger boarded using findByIdAndUpdate to bypass validation errors on legacy records
+    await Booking.findByIdAndUpdate(bookingId, { status: 'completed' });
 
     res.json({
       success: true,
@@ -162,6 +170,34 @@ exports.checkInPassenger = async (req, res, next) => {
       data: booking
     });
   } catch (error) {
+    console.error("Check-in Error:", error);
+    res.status(400).json({ success: false, message: "Check-in failed due to server validation/format error", error: error.message });
+  }
+};
+
+// Start Trip and Notify Admin
+exports.startTrip = async (req, res, next) => {
+  try {
+    const { busId, location } = req.body;
+    const driver = await Driver.findById(req.userId);
+    
+    const { sendNotification } = require('./notificationController');
+    const Admin = require('../models/Admin');
+    
+    // Find all admins
+    const admins = await Admin.find({});
+    
+    // Notify all admins sequentially
+    for (const admin of admins) {
+      await sendNotification(admin._id, 'Admin', 'system_alert', `Driver ${driver.name} has started the trip for Bus ${busId || 'Unknown'} from ${location || 'Origin'}.`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Trip started successfully. Admin has been notified.'
+    });
+  } catch (error) {
+    console.error("Start Trip Error:", error);
     next(error);
   }
 };

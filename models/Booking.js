@@ -3,8 +3,12 @@ const mongoose = require('mongoose');
 const bookingSchema = new mongoose.Schema({
   bookingNumber: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    default: () => {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substr(2, 5);
+      return `BK-${timestamp.toUpperCase()}-${random.toUpperCase()}`;
+    }
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -19,6 +23,10 @@ const bookingSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'Travel date is required']
   },
+  travelTime: {
+    type: String,
+    default: '08:00 AM'
+  },
   location: {
     type: String,
     required: [true, 'Location is required'],
@@ -27,11 +35,27 @@ const bookingSchema = new mongoose.Schema({
   productType: {
     type: String,
     required: [true, 'Product type is required'],
-    enum: ['with_uae_visa', 'without_uae_visa']
+    enum: [
+        'shj_visa_extension', 'dxb_visa_extension', 
+        'standard_transfer', 'return_transfer',
+        'oman_uae_30', 'oman_uae_60',
+        'oman_uae_b2b_30', 'oman_uae_b2b_60'
+    ]
   },
-  passengerName: {
+  firstName: {
     type: String,
     required: true
+  },
+  lastName: {
+    type: String,
+    required: true
+  },
+  passengerName: String, // Keep for legacy compatibility
+  dateOfBirth: Date,
+  contactDetails: {
+    mobileNumber: String,
+    emailId: String,
+    whatsAppNumber: String
   },
   passportDetails: {
     number: String,
@@ -45,6 +69,7 @@ const bookingSchema = new mongoose.Schema({
   documents: {
     passport: String,
     photo: String,
+    currentVisa: String,
     uaeVisa: String,
     emiratesID: String
   },
@@ -77,6 +102,27 @@ const bookingSchema = new mongoose.Schema({
   cancellationDate: Date,
   cancellationFee: {
     type: Number,
+    default: 0
+  },
+  rescheduleRequest: {
+    requestedDate: Date,
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    rejectionReason: String,
+    requestedAt: Date
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['card', 'wallet', 'bank_transfer', 'cash'],
+    default: 'card'
+  },
+  bankSlip: String,
+  totalAmount: {
+    type: Number,
+    required: true,
     default: 0
   },
   createdAt: {
