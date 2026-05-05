@@ -65,4 +65,8 @@ router.get('/refunds', checkPermission('refunds'), adminController.getRefunds);
 // PUT /api/admin/refunds/:id/process - Process refund (approve/reject)
 router.put('/refunds/:id/process', checkPermission('refunds'), adminController.processRefund);
 
+// Settings
+router.get('/settings', authorize('admin'), adminController.getSettings);
+router.put('/settings', authorize('admin'), adminController.updateSetting);
+
 module.exports = router;

@@ -70,6 +70,11 @@ exports.createBooking = async (req, res, next) => {
     const rnd = Math.random().toString(36).substr(2, 5);
     const generatedBookingNumber = `BK-${ts.toUpperCase()}-${rnd.toUpperCase()}`;
 
+    // 3. Get service fee from settings
+    const Setting = require('../models/Setting');
+    const serviceFeeSetting = await Setting.findOne({ key: 'user_service_fee' });
+    const serviceFee = serviceFeeSetting ? parseFloat(serviceFeeSetting.value) : 7.5;
+
     const booking = await Booking.create({
       bookingNumber: generatedBookingNumber,
       user: req.userId,
@@ -83,7 +88,7 @@ exports.createBooking = async (req, res, next) => {
       location: bookingLocation,
       productType: productType || (isReturn ? 'oman_uae_30' : 'standard_transfer'),
       status: isVisaRequired ? 'processing' : (paymentMethod === 'card' ? 'confirmed' : 'pending'),
-      totalAmount: (busDoc.price || 150) + 7.5,
+      totalAmount: (busDoc.price || 150) + serviceFee,
       isReturnTrip: isReturn || false,
       paymentMethod: paymentMethod || 'card',
       bankSlip: bankSlip || null,

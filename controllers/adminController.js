@@ -624,3 +624,45 @@ exports.processRefund = async (req, res, next) => {
     next(error);
   }
 };
+// Get all settings
+exports.getSettings = async (req, res, next) => {
+  try {
+    const Setting = require('../models/Setting');
+    const settings = await Setting.find();
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update a setting
+exports.updateSetting = async (req, res, next) => {
+  try {
+    const { key, value } = req.body;
+    const Setting = require('../models/Setting');
+    
+    let setting = await Setting.findOne({ key });
+    if (setting) {
+      setting.value = value;
+      setting.updatedBy = req.userId;
+      await setting.save();
+    } else {
+      setting = await Setting.create({
+        key,
+        value,
+        updatedBy: req.userId
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Setting updated successfully',
+      data: setting
+    });
+  } catch (error) {
+    next(error);
+  }
+};
