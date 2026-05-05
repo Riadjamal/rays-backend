@@ -35,7 +35,7 @@ exports.createBus = async (req, res, next) => {
 // Get all buses
 exports.getAllBuses = async (req, res, next) => {
   try {
-    const { route, isActive } = req.query;
+    const { route, isActive, date } = req.query;
     
     const query = {};
     if (route) query.route = route;
@@ -45,9 +45,31 @@ exports.getAllBuses = async (req, res, next) => {
       .populate('driver', 'name phone email')
       .sort({ createdAt: -1 });
     
+    // If date is provided, calculate availability for each bus
+    let busesWithAvailability = buses;
+    if (date) {
+        const Seat = require('../models/Seat');
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        busesWithAvailability = await Promise.all(buses.map(async (bus) => {
+            const bookedCount = await Seat.countDocuments({
+                bus: bus._id,
+                tripDate: { $gte: startOfDay, $lte: endOfDay },
+                isBooked: true
+            });
+            const busObj = bus.toObject();
+            busObj.availableSeats = Math.max(0, bus.capacity - bookedCount);
+            busObj.bookedCount = bookedCount;
+            return busObj;
+        }));
+    }
+    
     res.json({
       success: true,
-      data: buses
+      data: busesWithAvailability
     });
   } catch (error) {
     next(error);

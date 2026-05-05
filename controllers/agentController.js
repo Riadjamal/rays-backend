@@ -152,7 +152,12 @@ exports.createBooking = async (req, res, next) => {
       busId,
       seatNumber,
       row,
-      column
+      column,
+      isReturnTrip,
+      returnDate,
+      returnSeatNumber,
+      returnRow,
+      returnColumn
     } = req.body;
 
     const agent = await Agent.findById(req.userId);
@@ -170,7 +175,14 @@ exports.createBooking = async (req, res, next) => {
       'oman_uae_b2b_30': 150,
       'oman_uae_b2b_60': 160
     };
-    const price = pricingMap[productType] || 150; 
+    
+    let basePrice = pricingMap[productType] || 150;
+    // Add return trip cost if applicable
+    if (isReturnTrip && returnDate) {
+        basePrice += (pricingMap['return_transfer'] || 50);
+    }
+    
+    const price = basePrice;
     
     if (agent.wallet.balance < price) {
       return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
@@ -205,7 +217,9 @@ exports.createBooking = async (req, res, next) => {
       documents,
       bus: busId,
       status: isVisaRequired ? 'processing' : 'confirmed',
-      totalAmount: price
+      totalAmount: price,
+      isReturnTrip: !!isReturnTrip,
+      returnDate: isReturnTrip ? returnDate : null
     });
 
     // 3a. Create Visa Application only if required
@@ -221,7 +235,8 @@ exports.createBooking = async (req, res, next) => {
         await booking.save();
     }
 
-    // 4. Handle Seat Reservation
+    // 4. Handle Departure Seat Reservation
+    const Seat = require('../models/Seat');
     if (seatNumber) {
         const seat = await Seat.create({
             bus: busId,
@@ -234,6 +249,22 @@ exports.createBooking = async (req, res, next) => {
             booking: booking._id
         });
         booking.seat = seat._id;
+        await booking.save();
+    }
+
+    // 4a. Handle Return Seat Reservation if applicable
+    if (isReturnTrip && returnSeatNumber) {
+        const rSeat = await Seat.create({
+            bus: busId, // Usually same bus for return, or we could handle returnBusId later
+            seatNumber: returnSeatNumber,
+            row: returnRow,
+            column: returnColumn,
+            tripDate: new Date(returnDate),
+            isBooked: true,
+            bookedBy: agent._id,
+            booking: booking._id
+        });
+        booking.returnSeat = rSeat._id;
         await booking.save();
     }
 
