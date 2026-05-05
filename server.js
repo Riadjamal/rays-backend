@@ -33,7 +33,9 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 // Connect to database
-connectDatabase();
+connectDatabase().catch(err => {
+  console.error('Initial Database Connection Failed:', err.message);
+});
 
 // Middleware
 app.use(helmet()); // Security headers
