@@ -22,12 +22,25 @@ exports.getDashboard = async (req, res, next) => {
       status: { $in: ['confirmed', 'processing'] }
     }).populate('user', 'name').populate('bus', 'busNumber');
 
+    // Get today's availability for each bus
+    const Seat = require('../models/Seat');
+    const busesWithAvailability = await Promise.all(driver.assignedBuses.map(async (bus) => {
+        const bookedCount = await Seat.countDocuments({
+            bus: bus._id,
+            tripDate: { $gte: today, $lt: tomorrow },
+            isBooked: true
+        });
+        const busObj = bus.toObject();
+        busObj.availableSeats = Math.max(0, bus.capacity - bookedCount);
+        return busObj;
+    }));
+
     res.json({
       success: true,
       data: {
         totalBuses,
         todayTripsCount: todayBookings.length,
-        assignedBuses: driver.assignedBuses,
+        assignedBuses: busesWithAvailability,
         todayTrips: todayBookings
       }
     });
@@ -130,6 +143,19 @@ exports.getRouteDetails = async (req, res, next) => {
       });
     }
     const bus = await Bus.findById(driver.assignedBuses[0]);
+    
+    // Calculate availability for today
+    const Seat = require('../models/Seat');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const bookedCount = await Seat.countDocuments({
+      bus: bus._id,
+      tripDate: { $gte: today, $lt: tomorrow },
+      isBooked: true
+    });
 
     res.json({
       success: true,
@@ -138,8 +164,9 @@ exports.getRouteDetails = async (req, res, next) => {
         busNumber: bus.busNumber,
         busName: bus.name,
         capacity: bus.capacity,
+        availableSeats: Math.max(0, bus.capacity - bookedCount),
         _id: bus._id,
-        bus: bus // Send full bus document for safety
+        bus: bus 
       }
     });
   } catch (error) {
