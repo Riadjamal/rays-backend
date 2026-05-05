@@ -34,13 +34,7 @@ const bookingSchema = new mongoose.Schema({
   },
   productType: {
     type: String,
-    required: [true, 'Product type is required'],
-    enum: [
-        'shj_visa_extension', 'dxb_visa_extension', 
-        'standard_transfer', 'return_transfer',
-        'oman_uae_30', 'oman_uae_60',
-        'oman_uae_b2b_30', 'oman_uae_b2b_60'
-    ]
+    required: [true, 'Product type is required']
   },
   firstName: {
     type: String,

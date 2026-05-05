@@ -212,7 +212,7 @@ exports.createBooking = async (req, res, next) => {
       lastName,
       dateOfBirth,
       passengerName: `${firstName} ${lastName}`,
-      passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality },
+      passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality, dob: dateOfBirth },
       documents,
       bus: busId,
       status: isVisaRequired ? 'processing' : 'confirmed',
