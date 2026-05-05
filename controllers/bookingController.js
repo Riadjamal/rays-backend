@@ -171,6 +171,7 @@ exports.getAllBookings = async (req, res, next) => {
         populate: { path: 'driver', select: 'name phone' }
       })
       .populate('seat')
+      .populate('returnSeat')
       .populate('payment')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -204,6 +205,7 @@ exports.getBookingById = async (req, res, next) => {
         populate: { path: 'driver', select: 'name phone' }
       })
       .populate('seat')
+      .populate('returnSeat')
       .populate('payment');
 
     if (!booking) {
