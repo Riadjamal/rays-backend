@@ -328,6 +328,7 @@ exports.getBookings = async (req, res, next) => {
         populate: { path: 'driver' }
       })
       .populate('seat')
+      .populate('returnSeat')
       .populate('payment')
       .sort({ createdAt: -1 });
 
@@ -354,6 +355,7 @@ exports.getBookingById = async (req, res, next) => {
         populate: { path: 'driver' }
       })
       .populate('seat')
+      .populate('returnSeat')
       .populate('payment');
 
     if (!booking) {
