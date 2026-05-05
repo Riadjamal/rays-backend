@@ -666,3 +666,65 @@ exports.updateSetting = async (req, res, next) => {
     next(error);
   }
 };
+
+// GET all services
+exports.getServices = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const services = await Service.find().sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      data: services
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// CREATE a service
+exports.createService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.create(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Service created successfully',
+      data: service
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// UPDATE a service
+exports.updateService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
+    
+    res.json({
+      success: true,
+      message: 'Service updated successfully',
+      data: service
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE a service
+exports.deleteService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.findByIdAndDelete(req.params.id);
+    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
+    
+    res.json({
+      success: true,
+      message: 'Service deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};

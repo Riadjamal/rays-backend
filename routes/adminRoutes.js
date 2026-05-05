@@ -69,4 +69,10 @@ router.put('/refunds/:id/process', checkPermission('refunds'), adminController.p
 router.get('/settings', authorize('admin'), adminController.getSettings);
 router.put('/settings', authorize('admin'), adminController.updateSetting);
 
+// Services
+router.get('/services', checkPermission('dashboard'), adminController.getServices);
+router.post('/services', authorize('admin'), adminController.createService);
+router.put('/services/:id', authorize('admin'), adminController.updateService);
+router.delete('/services/:id', authorize('admin'), adminController.deleteService);
+
 module.exports = router;

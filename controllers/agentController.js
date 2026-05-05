@@ -167,19 +167,18 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 1. Wallet Balance Check
-    const pricingMap = {
-      'shj_visa_extension': 150,
-      'dxb_visa_extension': 160,
-      'standard_transfer': 50,
-      'return_transfer': 50,
-      'oman_uae_b2b_30': 150,
-      'oman_uae_b2b_60': 160
-    };
+    // 1. Get dynamic pricing from Service model
+    const Service = require('../models/Service');
+    const service = await Service.findOne({ key: productType });
+    if (!service) {
+        return res.status(400).json({ success: false, message: 'Invalid service type selected' });
+    }
     
-    let basePrice = pricingMap[productType] || 150;
+    let basePrice = service.price;
     // Add return trip cost if applicable
     if (isReturnTrip && returnDate) {
-        basePrice += (pricingMap['return_transfer'] || 50);
+        const returnService = await Service.findOne({ key: 'return_transfer' });
+        basePrice += (returnService ? returnService.price : 50);
     }
     
     const price = basePrice;
