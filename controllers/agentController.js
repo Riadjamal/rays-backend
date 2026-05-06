@@ -206,6 +206,11 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3. Create Booking
+    const isVisaRequired = productType.toLowerCase().includes('oman') || 
+                          productType.toLowerCase().includes('visa') || 
+                          productType.toLowerCase().includes('b2b') ||
+                          productType.toLowerCase().includes('extension');
+
     const booking = await Booking.create({
       bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
       user: user._id,

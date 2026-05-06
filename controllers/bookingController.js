@@ -124,6 +124,12 @@ exports.createBooking = async (req, res, next) => {
       booking: booking._id
     });
 
+    // 3b. Redefine visa requirement for record creation
+    const isVisaRequired = productType?.toLowerCase().includes('oman') || 
+                          productType?.toLowerCase().includes('visa') || 
+                          productType?.toLowerCase().includes('b2b') ||
+                          productType?.toLowerCase().includes('extension');
+
     // 5. Create Visa Application Record (Required for Oman Trip)
     let visaDoc = null;
     if (isVisaRequired) {
