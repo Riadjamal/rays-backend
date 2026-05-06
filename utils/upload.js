@@ -28,14 +28,18 @@ const storage = process.env.NODE_ENV === 'production'
 
 // File Filter
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    
+    // Check both extension and common mimetypes
+    const isDoc = file.mimetype === 'application/msword' || 
+                 file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const isImageOrPdf = /image\/(jpeg|jpg|png)|application\/pdf/.test(file.mimetype);
 
-    if (extname && mimetype) {
+    if (extname && (isDoc || isImageOrPdf)) {
         return cb(null, true);
     } else {
-        cb(new Error('Only images (JPEG/JPG/PNG) and PDF files are allowed!'));
+        cb(new Error('Only images (JPEG/JPG/PNG), PDF, and Word documents (.doc, .docx) are allowed!'));
     }
 };
 
