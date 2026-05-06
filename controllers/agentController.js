@@ -293,7 +293,7 @@ exports.createBooking = async (req, res, next) => {
     const { sendBookingConfirmation } = require('../utils/mailer');
     await sendBookingConfirmation(customerEmail, {
         bookingNumber: booking.bookingNumber,
-        passengerName: customerName,
+        passengerName: booking.passengerName,
         travelDate,
         location
     });
