@@ -12,7 +12,8 @@ exports.createBooking = async (req, res, next) => {
     const { 
       bus, travelDate, passengerName, 
       firstName, lastName, dateOfBirth,
-      passportNumber, nationality, 
+      mobileNumber, emailId, whatsAppNumber,
+      passportNumber, nationality, passportExpiry,
       seat, location, productType, isReturn, 
       paymentMethod, bankSlip,
       passportFile, photoFile, uaeVisaFile, razorpay_payment_id
@@ -96,12 +97,21 @@ exports.createBooking = async (req, res, next) => {
       travelDate,
       firstName: firstName || passengerName?.split(' ')[0],
       lastName: lastName || passengerName?.split(' ').slice(1).join(' '),
-      passengerName,
+      passengerName: passengerName || `${firstName} ${lastName}`,
       dateOfBirth,
-      passportDetails: { number: passportNumber, nationality },
+      contactDetails: {
+          mobileNumber,
+          emailId,
+          whatsAppNumber
+      },
+      passportDetails: { 
+          number: passportNumber, 
+          nationality, 
+          expiryDate: passportExpiry 
+      },
       location: bookingLocation,
       productType: productType || (isReturn ? 'oman_uae_30' : 'standard_transfer'),
-      status: 'processing', // User bookings also go to processing for admin to verify docs
+      status: 'processing',
       totalAmount: totalPrice,
       isReturnTrip: isReturn || false,
       paymentMethod: paymentMethod || 'card',

@@ -217,15 +217,25 @@ exports.createBooking = async (req, res, next) => {
       agent: agent._id,
       travelDate,
       location,
-      productType,
-      firstName,
-      lastName,
+      productType: productType || 'return_transfer',
+      firstName: firstName || passengerName?.split(' ')[0],
+      lastName: lastName || passengerName?.split(' ').slice(1).join(' '),
+      passengerName: passengerName || `${firstName} ${lastName}`,
       dateOfBirth,
-      passengerName: `${firstName} ${lastName}`,
-      passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality, dob: dateOfBirth },
-      documents,
+      contactDetails: {
+          mobileNumber: customerPhone || contactDetails?.mobileNumber,
+          emailId: customerEmail || contactDetails?.emailId,
+          whatsAppNumber: whatsappNumber || contactDetails?.whatsAppNumber
+      },
+      passportDetails: { 
+          number: passportNumber || passportDetails?.number, 
+          expiryDate: passportExpiry || passportDetails?.expiryDate, 
+          nationality: nationality || passportDetails?.nationality, 
+          dob: dateOfBirth 
+      },
+      documents: documents || {},
       bus: busId,
-      status: 'processing', // All agent bookings require admin approval/processing
+      status: 'processing',
       totalAmount: price,
       isReturnTrip: !!isReturnTrip,
       returnDate: isReturnTrip ? returnDate : null
