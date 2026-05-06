@@ -169,12 +169,18 @@ exports.createBooking = async (req, res, next) => {
     // 1. Wallet Balance Check
     // 1. Get dynamic pricing from Service model
     const Service = require('../models/Service');
+    const Bus = require('../models/Bus');
     const service = await Service.findOne({ key: productType });
+    const bus = await Bus.findById(busId);
+    
     if (!service) {
         return res.status(400).json({ success: false, message: 'Invalid service type selected' });
     }
+    if (!bus) {
+        return res.status(400).json({ success: false, message: 'Bus not found' });
+    }
     
-    let basePrice = service.price;
+    let basePrice = bus.price + service.price;
     // Add return trip cost if applicable
     if (isReturnTrip && returnDate) {
         const returnService = await Service.findOne({ key: 'return_transfer' });
@@ -200,7 +206,6 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3. Create Booking
-    const isVisaRequired = productType.includes('extension') || productType.includes('b2b');
     const booking = await Booking.create({
       bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
       user: user._id,
@@ -215,7 +220,7 @@ exports.createBooking = async (req, res, next) => {
       passportDetails: { number: passportNumber, expiryDate: passportExpiry, nationality, dob: dateOfBirth },
       documents,
       bus: busId,
-      status: isVisaRequired ? 'processing' : 'confirmed',
+      status: 'processing', // All agent bookings require admin approval/processing
       totalAmount: price,
       isReturnTrip: !!isReturnTrip,
       returnDate: isReturnTrip ? returnDate : null

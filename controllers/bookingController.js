@@ -70,10 +70,21 @@ exports.createBooking = async (req, res, next) => {
     const rnd = Math.random().toString(36).substr(2, 5);
     const generatedBookingNumber = `BK-${ts.toUpperCase()}-${rnd.toUpperCase()}`;
 
-    // 3. Get service fee from settings
+    // 3. Get dynamic pricing from Service model
+    const Service = require('../models/Service');
+    const serviceDoc = await Service.findOne({ key: productType || 'oman_uae_30' });
+    const servicePrice = serviceDoc ? serviceDoc.price : (productType?.includes('60') ? 250 : 200);
+    
+    // Get service fee from settings
     const Setting = require('../models/Setting');
     const serviceFeeSetting = await Setting.findOne({ key: 'user_service_fee' });
     const serviceFee = serviceFeeSetting ? parseFloat(serviceFeeSetting.value) : 7.5;
+
+    let totalPrice = (busDoc.price || 150) + servicePrice + serviceFee;
+    if (isReturn) {
+        const returnService = await Service.findOne({ key: 'return_transfer' });
+        totalPrice += (returnService ? returnService.price : 50);
+    }
 
     const booking = await Booking.create({
       bookingNumber: generatedBookingNumber,
@@ -87,8 +98,8 @@ exports.createBooking = async (req, res, next) => {
       passportDetails: { number: passportNumber, nationality },
       location: bookingLocation,
       productType: productType || (isReturn ? 'oman_uae_30' : 'standard_transfer'),
-      status: isVisaRequired ? 'processing' : (paymentMethod === 'card' ? 'confirmed' : 'pending'),
-      totalAmount: (busDoc.price || 150) + serviceFee,
+      status: 'processing', // User bookings also go to processing for admin to verify docs
+      totalAmount: totalPrice,
       isReturnTrip: isReturn || false,
       paymentMethod: paymentMethod || 'card',
       bankSlip: bankSlip || null,
