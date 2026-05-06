@@ -114,6 +114,7 @@ exports.createBooking = async (req, res, next) => {
       status: 'processing',
       totalAmount: totalPrice,
       isReturnTrip: isReturn || false,
+      returnDate: isReturn ? returnDate : null,
       paymentMethod: paymentMethod || 'card',
       bankSlip: bankSlip || null,
       documents: {

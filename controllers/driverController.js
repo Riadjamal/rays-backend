@@ -10,11 +10,11 @@ exports.getDashboard = async (req, res, next) => {
     // Get stats
     const totalBuses = driver.assignedBuses.length;
     
-    // Get today's trips
+    // Get today's trips (UTC normalized to match bookings)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
     const todayBookings = await Booking.find({
       bus: { $in: driver.assignedBuses },
