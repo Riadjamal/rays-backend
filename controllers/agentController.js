@@ -247,12 +247,15 @@ exports.createBooking = async (req, res, next) => {
     // 4. Handle Departure Seat Reservation
     const Seat = require('../models/Seat');
     if (seatNumber) {
+        const depDate = new Date(travelDate);
+        depDate.setHours(0, 0, 0, 0);
+        
         const seat = await Seat.create({
             bus: busId,
             seatNumber,
             row,
             column,
-            tripDate: new Date(travelDate),
+            tripDate: depDate,
             isBooked: true,
             bookedBy: agent._id,
             booking: booking._id
@@ -263,12 +266,15 @@ exports.createBooking = async (req, res, next) => {
 
     // 4a. Handle Return Seat Reservation if applicable
     if (isReturnTrip && returnSeatNumber) {
+        const retDate = new Date(returnDate);
+        retDate.setHours(0, 0, 0, 0);
+
         const rSeat = await Seat.create({
             bus: busId, // Usually same bus for return, or we could handle returnBusId later
             seatNumber: returnSeatNumber,
             row: returnRow,
             column: returnColumn,
-            tripDate: new Date(returnDate),
+            tripDate: retDate,
             isBooked: true,
             bookedBy: agent._id,
             booking: booking._id
