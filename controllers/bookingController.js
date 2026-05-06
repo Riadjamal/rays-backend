@@ -52,7 +52,10 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3. Create the booking
-    const isVisaRequired = productType?.includes('oman_uae');
+    const isVisaRequired = productType?.toLowerCase().includes('oman') || 
+                          productType?.toLowerCase().includes('visa') || 
+                          productType?.toLowerCase().includes('b2b') ||
+                          productType?.toLowerCase().includes('extension');
 
     // Determine location from bus route or default to SHJ
     let bookingLocation = location;
@@ -124,11 +127,7 @@ exports.createBooking = async (req, res, next) => {
       booking: booking._id
     });
 
-    // 3b. Redefine visa requirement for record creation
-    const isVisaRequired = productType?.toLowerCase().includes('oman') || 
-                          productType?.toLowerCase().includes('visa') || 
-                          productType?.toLowerCase().includes('b2b') ||
-                          productType?.toLowerCase().includes('extension');
+
 
     // 5. Create Visa Application Record (Required for Oman Trip)
     let visaDoc = null;
