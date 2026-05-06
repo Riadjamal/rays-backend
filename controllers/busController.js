@@ -50,9 +50,9 @@ exports.getAllBuses = async (req, res, next) => {
     if (date) {
         const Seat = require('../models/Seat');
         const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
+        startOfDay.setUTCHours(0, 0, 0, 0);
         const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
+        endOfDay.setUTCHours(23, 59, 59, 999);
 
         busesWithAvailability = await Promise.all(buses.map(async (bus) => {
             const bookedCount = await Seat.countDocuments({

@@ -248,18 +248,19 @@ exports.createBooking = async (req, res, next) => {
     const Seat = require('../models/Seat');
     if (seatNumber) {
         const depDate = new Date(travelDate);
-        depDate.setHours(0, 0, 0, 0);
+        depDate.setUTCHours(0, 0, 0, 0); // Use UTC for consistency
         
-        const seat = await Seat.create({
-            bus: busId,
-            seatNumber,
-            row,
-            column,
-            tripDate: depDate,
-            isBooked: true,
-            bookedBy: agent._id,
-            booking: booking._id
-        });
+        const seat = await Seat.findOneAndUpdate(
+            { bus: busId, seatNumber, tripDate: depDate },
+            { 
+                row, 
+                column, 
+                isBooked: true, 
+                bookedBy: agent._id, 
+                booking: booking._id 
+            },
+            { upsert: true, new: true }
+        );
         booking.seat = seat._id;
         await booking.save();
     }
@@ -267,18 +268,19 @@ exports.createBooking = async (req, res, next) => {
     // 4a. Handle Return Seat Reservation if applicable
     if (isReturnTrip && returnSeatNumber) {
         const retDate = new Date(returnDate);
-        retDate.setHours(0, 0, 0, 0);
+        retDate.setUTCHours(0, 0, 0, 0); // Use UTC for consistency
 
-        const rSeat = await Seat.create({
-            bus: busId, // Usually same bus for return, or we could handle returnBusId later
-            seatNumber: returnSeatNumber,
-            row: returnRow,
-            column: returnColumn,
-            tripDate: retDate,
-            isBooked: true,
-            bookedBy: agent._id,
-            booking: booking._id
-        });
+        const rSeat = await Seat.findOneAndUpdate(
+            { bus: busId, seatNumber: returnSeatNumber, tripDate: retDate },
+            { 
+                row: returnRow, 
+                column: returnColumn, 
+                isBooked: true, 
+                bookedBy: agent._id, 
+                booking: booking._id 
+            },
+            { upsert: true, new: true }
+        );
         booking.returnSeat = rSeat._id;
         await booking.save();
     }

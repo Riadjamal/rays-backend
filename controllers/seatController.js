@@ -161,11 +161,11 @@ exports.getSeatLayout = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Bus not found' });
     }
 
-    // Normalize date to start and end of day for match
+    // Normalize date to start and end of day for match (UTC)
     const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     // Find all seat records for this bus and date (booked or blocked)
     const seatRecords = await Seat.find({
@@ -226,9 +226,9 @@ exports.toggleBlockSeat = async (req, res, next) => {
     const { busId, seatNumber, tripDate, status } = req.body; 
 
     const startOfDay = new Date(tripDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(tripDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     if (status === 'available') {
       const seat = await Seat.findOne({ 
