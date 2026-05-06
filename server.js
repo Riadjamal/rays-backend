@@ -92,6 +92,7 @@ app.use('/api/buses', busRoutes);
 app.use('/api/seats', seatRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/services', require('./routes/serviceRoutes'));
 app.use('/api/settings', require('./routes/settingRoutes'));
 app.use('/api', uploadRoutes);
 
