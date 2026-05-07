@@ -469,7 +469,10 @@ exports.cancelBooking = async (req, res, next) => {
 // Update booking (date/bus change)
 exports.updateBooking = async (req, res, next) => {
   try {
-    const { travelDate, location, busId } = req.body;
+    const { 
+      travelDate, location, busId,
+      firstName, lastName, passportNumber, nationality
+    } = req.body;
     
     const booking = await Booking.findOne({
       _id: req.params.id,
@@ -490,13 +493,31 @@ exports.updateBooking = async (req, res, next) => {
       });
     }
 
-    // Update fields
-    if (travelDate) booking.travelDate = travelDate;
+    // Update logistics
+    if (travelDate) {
+        const normalizedDate = new Date(travelDate);
+        normalizedDate.setUTCHours(0, 0, 0, 0);
+        booking.travelDate = normalizedDate;
+    }
     if (location) booking.location = location;
     if (busId) booking.bus = busId;
 
+    // Update passenger info
+    if (firstName) booking.firstName = firstName;
+    if (lastName) booking.lastName = lastName;
+    if (firstName || lastName) {
+        booking.passengerName = `${firstName || booking.firstName} ${lastName || booking.lastName}`;
+    }
+    if (passportNumber) {
+        booking.passportDetails = { ...booking.passportDetails, number: passportNumber };
+    }
+    if (nationality) {
+        booking.passportDetails = { ...booking.passportDetails, nationality: nationality };
+    }
+
     // Release old seat if bus/date changed
     if (booking.seat && (busId || travelDate)) {
+      const Seat = require('../models/Seat');
       await Seat.findByIdAndDelete(booking.seat);
       booking.seat = null;
     }
