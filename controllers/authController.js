@@ -104,19 +104,31 @@ exports.login = async (req, res, next) => {
     const { email, password, role } = req.body;
 
     let user;
-    if (role === 'user') {
-      user = await User.findOne({ email }).select('+password');
-    } else if (role === 'agent') {
-      user = await Agent.findOne({ email }).select('+password');
-    } else if (role === 'admin') {
-      user = await Admin.findOne({ email }).select('+password');
-    } else if (role === 'driver') {
-      user = await Driver.findOne({ email }).select('+password');
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid role'
-      });
+    let detectedRole;
+    const searchEmail = email.toLowerCase();
+
+    // Check Admin collection
+    user = await Admin.findOne({ email: searchEmail }).select('+password');
+    if (user) {
+        detectedRole = 'admin';
+    }
+
+    // If not admin, check Agent collection
+    if (!user) {
+        user = await Agent.findOne({ email: searchEmail }).select('+password');
+        if (user) detectedRole = 'agent';
+    }
+
+    // If not agent, check Driver collection
+    if (!user) {
+        user = await Driver.findOne({ email: searchEmail }).select('+password');
+        if (user) detectedRole = 'driver';
+    }
+
+    // If still not found, check User collection
+    if (!user) {
+        user = await User.findOne({ email: searchEmail }).select('+password');
+        if (user) detectedRole = 'user';
     }
 
     if (!user) {
@@ -142,14 +154,14 @@ exports.login = async (req, res, next) => {
     }
 
     // Check if agent is approved
-    if (role === 'agent' && !user.isApproved) {
+    if (detectedRole === 'agent' && !user.isApproved) {
       return res.status(403).json({
         success: false,
         message: 'Agent account not yet approved by admin'
       });
     }
 
-    const actualRole = user.role || role;
+    const actualRole = user.role || detectedRole;
     const token = generateToken(user._id, actualRole);
 
     res.json({

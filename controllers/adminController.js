@@ -186,12 +186,15 @@ exports.getAgents = async (req, res, next) => {
 exports.approveAgent = async (req, res, next) => {
   try {
     const agent = await Agent.findById(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });
+    
     agent.isApproved = true;
+    agent.isBlocked = false; // Ensure they are unblocked when approved
     await agent.save();
 
     res.json({
       success: true,
-      message: 'Agent approved successfully',
+      message: 'Agent approved and activated successfully',
       data: agent
     });
   } catch (error) {
