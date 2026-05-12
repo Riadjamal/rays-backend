@@ -34,4 +34,10 @@ router.get('/booking/:bookingId', visaController.getVisaByBooking);
 // GET /api/visas/my-visas - Get current user's visas
 router.get('/my-visas', visaController.getMyVisas);
 
+// GET /api/visas/agent - Get agent's visas
+router.get('/agent', authorize('agent'), visaController.getAgentVisas);
+
+// PUT /api/visas/:id/agent-update - Agent update visa
+router.put('/:id/agent-update', authorize('agent'), visaController.agentUpdateVisa);
+
 module.exports = router;

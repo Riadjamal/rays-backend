@@ -9,11 +9,11 @@ const visaSchema = new mongoose.Schema({
   type: {
     type: String,
     default: 'oman_visa',
-    enum: ['oman_visa']
+    enum: ['oman_visa', 'uae_visa', 'saudi_visa']
   },
   visaType: {
     type: String,
-    enum: ['SHJ', 'DXB', 'OMAN', 'NONE'],
+    enum: ['SHJ', 'DXB', 'OMAN', 'SAUDI', 'UAE', 'NONE'],
     default: 'NONE'
   },
   status: {

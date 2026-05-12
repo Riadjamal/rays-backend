@@ -12,6 +12,8 @@ const agentSchema = new mongoose.Schema({
     required: [true, 'Contact person name is required'],
     trim: true
   },
+  logo: String,
+  directNumber: String,
   email: {
     type: String,
     required: [true, 'Email is required'],
@@ -85,7 +87,21 @@ const agentSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  productPricing: [{
+    service: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service'
+    },
+    agentPrice: {
+      type: Number,
+      min: 0
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  }]
 });
 
 // Hash password before saving

@@ -183,6 +183,55 @@ exports.getAgents = async (req, res, next) => {
 };
 
 // Approve agent
+// Get single agent by ID with product pricing
+exports.getAgentById = async (req, res, next) => {
+  try {
+    const agent = await Agent.findById(req.params.id)
+      .populate('productPricing.service')
+      .select('-password');
+    
+    if (!agent) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    const Service = require('../models/Service');
+    const allServices = await Service.find({ isActive: true });
+
+    res.json({
+      success: true,
+      data: {
+        agent,
+        allServices
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update agent product pricing and status
+exports.updateAgentProducts = async (req, res, next) => {
+  try {
+    const { productPricing } = req.body;
+    const agent = await Agent.findById(req.params.id);
+
+    if (!agent) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    agent.productPricing = productPricing;
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Agent product pricing updated successfully',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.approveAgent = async (req, res, next) => {
   try {
     const agent = await Agent.findById(req.params.id);
@@ -205,7 +254,10 @@ exports.approveAgent = async (req, res, next) => {
 // Create new agent
 exports.createAgent = async (req, res, next) => {
   try {
-    const { companyName, contactPerson, email, phone, companyDetails } = req.body;
+    const { companyName, contactPerson, email, phone, companyDetails, tradeLicense, address } = req.body;
+    const finalCompanyDetails = companyDetails || { tradeLicense: tradeLicense || '', address: address || '' };
+
+
 
     const existingAgent = await Agent.findOne({ email });
     if (existingAgent) {
@@ -223,7 +275,7 @@ exports.createAgent = async (req, res, next) => {
       contactPerson,
       email,
       phone,
-      companyDetails,
+      companyDetails: finalCompanyDetails,
       setupPasswordToken: setupToken,
       setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000, // 48 hours
       isApproved: true
@@ -451,7 +503,7 @@ exports.getPayments = async (req, res, next) => {
       .populate('booking')
       .populate('user')
       .populate('agent')
-      .sort({ createdAt: -1 });
+      .sort({ status: 1, createdAt: -1 }); // pending first, then newest
 
     res.json({
       success: true,
@@ -461,6 +513,45 @@ exports.getPayments = async (req, res, next) => {
     next(error);
   }
 };
+
+// Approve pending payment (recharge)
+exports.approvePayment = async (req, res, next) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found' });
+    }
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Payment is already processed' });
+    }
+
+    if (payment.type === 'recharge' && payment.agent) {
+      const agent = await Agent.findById(payment.agent);
+      if (agent) {
+        agent.wallet.balance += payment.amount;
+        agent.wallet.transactions.push({
+          type: 'credit',
+          amount: payment.amount,
+          description: `Wallet recharge confirmed by Accountant (Txn: ${payment.transactionId})`
+        });
+        await agent.save();
+      }
+    }
+
+    payment.status = 'completed';
+    await payment.save();
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed and balance updated',
+      data: payment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // Add balance to agent wallet
 exports.addWalletBalance = async (req, res, next) => {

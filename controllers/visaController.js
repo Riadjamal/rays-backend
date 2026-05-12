@@ -173,13 +173,21 @@ exports.getVisaStats = async (req, res, next) => {
     const processing = await Visa.countDocuments({ status: 'processing' });
     const approved = await Visa.countDocuments({ status: 'approved' });
 
+    // Per-type counts
+    const oman = await Visa.countDocuments({ type: 'oman_visa' });
+    const uae = await Visa.countDocuments({ type: 'uae_visa' });
+    const saudi = await Visa.countDocuments({ type: 'saudi_visa' });
+
     res.json({
       success: true,
       data: {
         total,
         pending,
         processing,
-        approved
+        approved,
+        oman,
+        uae,
+        saudi
       }
     });
   } catch (error) {
@@ -293,6 +301,58 @@ exports.getMyVisas = async (req, res, next) => {
     res.json({
       success: true,
       data: visas
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get agent's visas
+exports.getAgentVisas = async (req, res, next) => {
+  try {
+    const agentBookings = await Booking.find({ agent: req.userId }).select('_id');
+    const bookingIds = agentBookings.map(b => b._id);
+
+    const visas = await Visa.find({ booking: { $in: bookingIds } })
+      .populate('booking')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: visas
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Agent upload/update visa document
+exports.agentUpdateVisa = async (req, res, next) => {
+  try {
+    const { visaDocument, notes } = req.body;
+    
+    const visa = await Visa.findById(req.params.id).populate('booking');
+    if (!visa) {
+      return res.status(404).json({ success: false, message: 'Visa record not found' });
+    }
+
+    // Security check: Ensure this booking belongs to the requesting agent
+    if (visa.booking.agent.toString() !== req.userId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this visa' });
+    }
+
+    if (visaDocument) visa.visaDocument = visaDocument;
+    if (notes) visa.notes = notes;
+    
+    // If agent is uploading a doc, maybe it's already approved?
+    // Let's keep status update optional or restricted.
+    
+    await visa.save();
+
+    res.json({
+      success: true,
+      message: 'Visa document updated successfully',
+      data: visa
     });
   } catch (error) {
     next(error);

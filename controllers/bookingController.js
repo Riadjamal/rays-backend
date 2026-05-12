@@ -77,7 +77,24 @@ exports.createBooking = async (req, res, next) => {
     // 3. Get dynamic pricing from Service model
     const Service = require('../models/Service');
     const serviceDoc = await Service.findOne({ key: productType || 'oman_uae_30' });
-    const servicePrice = serviceDoc ? serviceDoc.price : (productType?.includes('60') ? 250 : 200);
+    let servicePrice = serviceDoc ? serviceDoc.price : (productType?.includes('60') ? 250 : 200);
+    
+    // If agent is booking, check for custom price and active status
+    if (req.userRole === 'agent' && serviceDoc) {
+      const agent = await Agent.findById(req.userId);
+      const customPricing = agent.productPricing?.find(p => 
+        (p.service?.toString() === serviceDoc._id.toString())
+      );
+      
+      if (customPricing) {
+        if (!customPricing.isActive) {
+          return res.status(403).json({ success: false, message: 'This service is currently disabled for your account' });
+        }
+        if (customPricing.agentPrice !== undefined) {
+          servicePrice = customPricing.agentPrice;
+        }
+      }
+    }
     
     // Get service fee from settings
     const Setting = require('../models/Setting');
@@ -140,14 +157,19 @@ exports.createBooking = async (req, res, next) => {
 
 
 
-    // 5. Create Visa Application Record (Required for Oman Trip)
+    // 5. Create Visa Application Record
     let visaDoc = null;
     if (isVisaRequired) {
         const Visa = require('../models/Visa');
+        let vType = 'oman_visa';
+        if (productType?.toLowerCase().includes('saudi')) vType = 'saudi_visa';
+        else if (productType?.toLowerCase().includes('uae')) vType = 'uae_visa';
+
         visaDoc = await Visa.create({
             booking: booking._id,
+            type: vType,
             status: 'pending',
-            visaType: 'OMAN',
+            visaType: vType === 'oman_visa' ? 'OMAN' : (vType === 'saudi_visa' ? 'SAUDI' : 'UAE'),
             appliedDate: new Date()
         });
         booking.visa = visaDoc._id;
@@ -230,7 +252,7 @@ exports.getBookingById = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id)
       .populate('user')
-      .populate('agent')
+      .populate('agent', 'companyName logo directNumber phone email')
       .populate('visa')
       .populate({
         path: 'bus',

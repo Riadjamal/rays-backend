@@ -26,6 +26,12 @@ router.put('/users/:id/permissions', checkPermission('users'), adminController.u
 // GET /api/admin/agents - Get all agents
 router.get('/agents', checkPermission('agents'), adminController.getAgents);
 
+// GET /api/admin/agents/:id - Get single agent details
+router.get('/agents/:id', checkPermission('agents'), adminController.getAgentById);
+
+// PUT /api/admin/agents/:id/products - Update agent product pricing
+router.put('/agents/:id/products', checkPermission('agents'), adminController.updateAgentProducts);
+
 // PUT /api/admin/agents/:id/approve - Approve agent
 router.put('/agents/:id/approve', checkPermission('agents'), adminController.approveAgent);
 
@@ -52,6 +58,9 @@ router.put('/bookings/:id/status', checkPermission('bookings'), adminController.
 
 // GET /api/admin/payments - Get all payments
 router.get('/payments', checkPermission('payments'), adminController.getPayments);
+
+// PUT /api/admin/payments/:id/approve - Approve pending payment (recharge)
+router.put('/payments/:id/approve', checkPermission('payments'), adminController.approvePayment);
 
 // POST /api/admin/wallets/:id/add-balance - Add balance to agent wallet
 router.post('/wallets/:id/add-balance', checkPermission('agents'), adminController.addWalletBalance);

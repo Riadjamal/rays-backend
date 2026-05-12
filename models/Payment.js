@@ -3,8 +3,7 @@ const mongoose = require('mongoose');
 const paymentSchema = new mongoose.Schema({
   booking: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Booking',
-    required: true
+    ref: 'Booking'
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -22,8 +21,14 @@ const paymentSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['card', 'wallet']
+    enum: ['card', 'wallet', 'recharge']
   },
+  paymentMethod: {
+    type: String,
+    enum: ['card', 'bank_transfer', 'cash', 'wallet'],
+    default: 'card'
+  },
+  bankSlip: String,
   status: {
     type: String,
     default: 'pending',

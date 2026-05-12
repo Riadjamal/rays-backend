@@ -53,7 +53,7 @@ exports.registerUser = async (req, res) => {
 
 exports.registerAgent = async (req, res) => {
   try {
-    const { companyName, contactPerson, email, phone, companyDetails } = req.body;
+    const { companyName, contactPerson, email, phone, companyDetails, tradeLicense, address } = req.body;
 
     const agentExists = await Agent.findOne({ email });
     if (agentExists) {
@@ -63,6 +63,12 @@ exports.registerAgent = async (req, res) => {
       });
     }
 
+    // Prepare company details from root fields if provided
+    const finalCompanyDetails = companyDetails || {
+        tradeLicense: tradeLicense || '',
+        address: address || ''
+    };
+
     // Generate random setup token
     const setupToken = crypto.randomBytes(32).toString('hex');
 
@@ -71,7 +77,7 @@ exports.registerAgent = async (req, res) => {
       contactPerson,
       email,
       phone,
-      companyDetails,
+      companyDetails: finalCompanyDetails,
       setupPasswordToken: setupToken,
       setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000 // 48 hours
     });

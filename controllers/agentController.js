@@ -53,13 +53,15 @@ exports.getProfile = async (req, res, next) => {
 // Update agent profile
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { companyName, contactPerson, phone, companyDetails } = req.body;
+    const { companyName, contactPerson, phone, companyDetails, logo, directNumber } = req.body;
 
     const agent = await Agent.findById(req.userId);
 
     if (companyName) agent.companyName = companyName;
     if (contactPerson) agent.contactPerson = contactPerson;
     if (phone) agent.phone = phone;
+    if (logo) agent.logo = logo;
+    if (directNumber) agent.directNumber = directNumber;
     if (companyDetails) agent.companyDetails = { ...agent.companyDetails, ...companyDetails };
 
     await agent.save();
@@ -91,27 +93,28 @@ exports.getWallet = async (req, res, next) => {
   }
 };
 
-// Recharge wallet
+// Recharge wallet request
 exports.rechargeWallet = async (req, res, next) => {
   try {
-    const { amount, paymentMethod } = req.body;
+    const { amount, paymentMethod, transferSlip, bankSlip } = req.body;
 
-    const agent = await Agent.findById(req.userId);
-
-    agent.wallet.balance += amount;
-    agent.wallet.transactions.push({
-      type: 'credit',
+    // Create a pending payment record for the accountant to approve
+    const payment = await Payment.create({
+      agent: req.userId,
       amount,
-      description: `Wallet recharge via ${paymentMethod}`
+      type: 'recharge',
+      paymentMethod: paymentMethod || 'bank_transfer',
+      bankSlip: transferSlip || bankSlip || '',
+      status: 'pending',
+      transactionId: `REC-${Date.now().toString(36).toUpperCase()}`
     });
-
-    await agent.save();
 
     res.json({
       success: true,
-      message: 'Wallet recharged successfully',
+      message: 'Recharge request submitted successfully. Balance will be added once the Accountant confirms the transaction.',
       data: {
-        balance: agent.wallet.balance
+        paymentId: payment._id,
+        status: payment.status
       }
     });
   } catch (error) {
@@ -376,6 +379,7 @@ exports.getBookingById = async (req, res, next) => {
       agent: req.userId
     })
       .populate('user')
+      .populate('agent', 'companyName logo directNumber phone email')
       .populate('visa')
       .populate({
         path: 'bus',
