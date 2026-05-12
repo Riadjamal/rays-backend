@@ -575,3 +575,17 @@ exports.requestRefund = async (req, res, next) => {
     next(error);
   }
 };
+
+// GET all active services for agent
+exports.getServices = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const services = await Service.find({ isActive: true }).sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      data: services
+    });
+  } catch (error) {
+    next(error);
+  }
+};

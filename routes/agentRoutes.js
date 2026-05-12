@@ -44,4 +44,7 @@ router.put('/bookings/:id/update', agentController.updateBooking);
 // POST /api/agent/refund-request - Request refund
 router.post('/refund-request', agentController.requestRefund);
 
+// GET /api/agent/services - Get available services
+router.get('/services', agentController.getServices);
+
 module.exports = router;
