@@ -15,21 +15,19 @@ router.post('/upload', auth, upload.single('file'), (req, res) => {
     }
 
     const backendUrl = process.env.BACKEND_URL || '';
-    const fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';
+    let fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';
     
-    // If using memory storage (Vercel), we'd usually upload to a cloud provider here.
-    // For now, let's at least handle the case where filename might be missing.
-    if (process.env.NODE_ENV === 'production' && !req.file.filename) {
-        // This is a placeholder - in a real production app on Vercel, 
-        // you MUST use a cloud storage provider like Cloudinary or S3.
-        console.warn('File upload to local disk is not supported on Vercel production.');
+    // If using memory storage (Vercel/Production), convert to Base64 Data URI
+    if (process.env.NODE_ENV === 'production' || !req.file.filename) {
+        const base64Data = req.file.buffer.toString('base64');
+        fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
     }
 
     res.json({
         success: true,
         data: {
             url: fileUrl,
-            filename: req.file.filename || 'buffer-upload',
+            filename: req.file.filename || 'base64-upload',
             ocr: ocrData
         }
     });

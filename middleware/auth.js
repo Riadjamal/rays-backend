@@ -6,6 +6,9 @@ const Driver = require('../models/Driver');
 
 const auth = async (req, res, next) => {
   try {
+    const connectDatabase = require('../config/database');
+    await connectDatabase(); // Ensure DB is connected for serverless
+
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
