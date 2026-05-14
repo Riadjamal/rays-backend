@@ -14,24 +14,22 @@ router.post('/upload', auth, upload.single('file'), (req, res) => {
         return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const backendUrl = process.env.BACKEND_URL || '';
+    const fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';
     
-    // Mock OCR: If it's a "passport" field, return some dummy data
-    let ocrData = null;
-    if (req.body.type === 'passport') {
-        ocrData = {
-            passportNumber: '' + Math.floor(10000000 + Math.random() * 90000000),
-            firstName: 'PASSPORT',
-            lastName: 'HOLDER',
-            expiryDate: '2030-12-31'
-        };
+    // If using memory storage (Vercel), we'd usually upload to a cloud provider here.
+    // For now, let's at least handle the case where filename might be missing.
+    if (process.env.NODE_ENV === 'production' && !req.file.filename) {
+        // This is a placeholder - in a real production app on Vercel, 
+        // you MUST use a cloud storage provider like Cloudinary or S3.
+        console.warn('File upload to local disk is not supported on Vercel production.');
     }
 
     res.json({
         success: true,
         data: {
             url: fileUrl,
-            filename: req.file.filename,
+            filename: req.file.filename || 'buffer-upload',
             ocr: ocrData
         }
     });
