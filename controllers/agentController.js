@@ -333,6 +333,8 @@ exports.createBooking = async (req, res, next) => {
       description: `Payment for booking ${booking.bookingNumber}`,
       booking: booking._id
     });
+    // Add booking reference to agent
+    agent.bookings.push(booking._id);
     await agent.save();
 
     // 7. Notify User

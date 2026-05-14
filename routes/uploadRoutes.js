@@ -18,7 +18,7 @@ router.post('/upload', auth, upload.single('file'), (req, res) => {
     let fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';
     
     // If using memory storage (Vercel/Production), convert to Base64 Data URI
-    if (process.env.NODE_ENV === 'production' || !req.file.filename) {
+    if (!req.file.filename && req.file.buffer) {
         const base64Data = req.file.buffer.toString('base64');
         fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
     }
@@ -27,8 +27,7 @@ router.post('/upload', auth, upload.single('file'), (req, res) => {
         success: true,
         data: {
             url: fileUrl,
-            filename: req.file.filename || 'base64-upload',
-            ocr: ocrData
+            filename: req.file.filename || 'base64-upload'
         }
     });
 });
