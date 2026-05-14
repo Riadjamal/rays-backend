@@ -169,8 +169,7 @@ exports.createBooking = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Agent account not approved' });
     }
 
-    // 1. Wallet Balance Check
-    // 1. Get dynamic pricing from Service model
+    // 1. Get dynamic pricing
     const Service = require('../models/Service');
     const Bus = require('../models/Bus');
     const service = await Service.findOne({ key: productType });
@@ -183,14 +182,24 @@ exports.createBooking = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Bus not found' });
     }
     
-    let basePrice = bus.price + service.price;
+    // Check if agent has custom pricing for this service
+    let price = bus.price + service.price;
+    const customPriceEntry = agent.productPricing?.find(p => p.service.toString() === service._id.toString());
+    
+    if (customPriceEntry) {
+        if (!customPriceEntry.isActive) {
+            return res.status(403).json({ success: false, message: 'This service is currently disabled for your agency' });
+        }
+        if (customPriceEntry.agentPrice > 0) {
+            price = bus.price + customPriceEntry.agentPrice;
+        }
+    }
+    
     // Add return trip cost if applicable
     if (isReturnTrip && returnDate) {
         const returnService = await Service.findOne({ key: 'return_transfer' });
-        basePrice += (returnService ? returnService.price : 50);
+        price += (returnService ? returnService.price : 50);
     }
-    
-    const price = basePrice;
     
     if (agent.wallet.balance < price) {
       return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
@@ -246,11 +255,17 @@ exports.createBooking = async (req, res, next) => {
 
     // 3a. Create Visa Application only if required
     if (isVisaRequired) {
-        const Visa = require('../models/Visa');
+        // Detect Visa Category for the 3-box dashboard
+        let visaCategory = 'oman_visa';
+        const lowerType = productType.toLowerCase();
+        if (lowerType.includes('uae')) visaCategory = 'uae_visa';
+        else if (lowerType.includes('saudi')) visaCategory = 'saudi_visa';
+
         const visa = await Visa.create({
             booking: booking._id,
             status: 'pending',
-            visaType: productType.includes('shj') ? 'SHJ' : productType.includes('dxb') ? 'DXB' : 'OMAN',
+            type: visaCategory,
+            visaType: lowerType.includes('shj') ? 'SHJ' : lowerType.includes('dxb') ? 'DXB' : 'OMAN',
             appliedDate: new Date()
         });
         booking.visa = visa._id;
