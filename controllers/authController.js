@@ -107,6 +107,9 @@ exports.registerAgent = async (req, res) => {
 // Login
 exports.login = async (req, res, next) => {
   try {
+    const connectDatabase = require('../config/database');
+    await connectDatabase(); // Ensure connection is ready on Vercel
+
     const { email, password, role } = req.body;
 
     let user;

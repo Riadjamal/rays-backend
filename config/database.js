@@ -1,25 +1,44 @@
 const mongoose = require('mongoose');
 
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
 const connectDatabase = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 10s
-      socketTimeoutMS: 45000, // Close sockets after 45s
-      family: 4 // Use IPv4, skip trying IPv6
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      family: 4,
+      bufferCommands: false, // CRITICAL: Stop buffering if not connected
+    };
+
+    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {
+      console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
+      return mongoose;
+    }).catch(err => {
+      cached.promise = null;
+      console.error(`❌ MongoDB Connection Error: ${err.message}`);
+      throw err;
     });
-
-    // Disable buffering so we get errors immediately if the connection drops
-    mongoose.set('bufferCommands', false);
-
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    // On Vercel, we don't want to throw and crash the whole instance if possible, 
-    // but for initial connection it's better to know.
-    throw error;
   }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
 };
 
 module.exports = connectDatabase;
