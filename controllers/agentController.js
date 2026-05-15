@@ -57,11 +57,11 @@ exports.updateProfile = async (req, res, next) => {
 
     const agent = await Agent.findById(req.userId);
 
-    if (companyName) agent.companyName = companyName;
-    if (contactPerson) agent.contactPerson = contactPerson;
-    if (phone) agent.phone = phone;
-    if (logo) agent.logo = logo;
-    if (directNumber) agent.directNumber = directNumber;
+    if (companyName !== undefined) agent.companyName = companyName;
+    if (contactPerson !== undefined) agent.contactPerson = contactPerson;
+    if (phone !== undefined) agent.phone = phone;
+    if (logo !== undefined) agent.logo = logo;
+    if (directNumber !== undefined) agent.directNumber = directNumber;
     if (companyDetails) agent.companyDetails = { ...agent.companyDetails, ...companyDetails };
 
     await agent.save();
@@ -99,11 +99,16 @@ exports.rechargeWallet = async (req, res, next) => {
     const { amount, paymentMethod, transferSlip, bankSlip } = req.body;
 
     // Create a pending payment record for the accountant to approve
+    // Map frontend labels to backend enum values
+    let mappedMethod = 'bank_transfer';
+    if (paymentMethod === 'Credit Card' || paymentMethod === 'card') mappedMethod = 'card';
+    if (paymentMethod === 'Bank Transfer') mappedMethod = 'bank_transfer';
+
     const payment = await Payment.create({
       agent: req.userId,
       amount,
       type: 'recharge',
-      paymentMethod: paymentMethod || 'bank_transfer',
+      paymentMethod: mappedMethod,
       bankSlip: transferSlip || bankSlip || '',
       status: 'pending',
       transactionId: `REC-${Date.now().toString(36).toUpperCase()}`
@@ -222,10 +227,6 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3. Create Booking
-    const isVisaRequired = productType?.toLowerCase().includes('oman') || 
-                          productType?.toLowerCase().includes('visa') || 
-                          productType?.toLowerCase().includes('b2b') ||
-                          productType?.toLowerCase().includes('extension');
 
     const booking = await Booking.create({
       bookingNumber: `BK-${Date.now().toString(36).toUpperCase()}`,
@@ -257,23 +258,33 @@ exports.createBooking = async (req, res, next) => {
       returnDate: isReturnTrip ? returnDate : null
     });
 
-    // 3a. Create Visa Application only if required
-    if (isVisaRequired) {
+    // 3. Create Visa Application only if required
+    if (service.type === 'visa') {
         // Detect Visa Category for the 3-box dashboard
         let visaCategory = 'oman_visa';
-        const lowerType = productType.toLowerCase();
-        if (lowerType.includes('uae')) visaCategory = 'uae_visa';
-        else if (lowerType.includes('saudi')) visaCategory = 'saudi_visa';
+        const lowerName = service.name.toLowerCase();
+        const lowerKey = service.key.toLowerCase();
+        
+        if (lowerName.includes('saudi') || lowerKey.includes('saudi')) {
+            visaCategory = 'saudi_visa';
+        } else if (lowerName.includes('uae') && !lowerName.includes('oman')) {
+            // If it only says UAE (like UAE Tourist Visa)
+            visaCategory = 'uae_visa';
+        } else {
+            // Default to Oman for B2B and Oman-related visas
+            visaCategory = 'oman_visa';
+        }
 
         const visa = await Visa.create({
             booking: booking._id,
             status: 'pending',
             type: visaCategory,
-            visaType: lowerType.includes('shj') ? 'SHJ' : lowerType.includes('dxb') ? 'DXB' : 'OMAN',
+            visaType: lowerKey.includes('shj') ? 'SHJ' : lowerKey.includes('dxb') ? 'DXB' : 'OMAN',
             appliedDate: new Date()
         });
         booking.visa = visa._id;
         await booking.save();
+        console.log(`✅ Visa record created: ${visa._id} for category: ${visaCategory}`);
     }
 
     // 4. Handle Departure Seat Reservation
@@ -347,7 +358,13 @@ exports.createBooking = async (req, res, next) => {
         bookingNumber: booking.bookingNumber,
         passengerName: booking.passengerName,
         travelDate,
-        location
+    });
+    
+    // Populate agent info for immediate use (e.g. voucher)
+    await booking.populate('agent', 'companyName logo directNumber phone email');
+    await booking.populate({
+        path: 'bus',
+        populate: { path: 'driver' }
     });
 
     res.status(201).json({
@@ -378,6 +395,7 @@ exports.getBookings = async (req, res, next) => {
         path: 'bus',
         populate: { path: 'driver' }
       })
+      .populate('agent', 'companyName logo directNumber phone email')
       .populate('seat')
       .populate('returnSeat')
       .populate('payment')

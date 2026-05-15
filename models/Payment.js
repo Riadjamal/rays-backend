@@ -25,7 +25,6 @@ const paymentSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['card', 'bank_transfer', 'cash', 'wallet'],
     default: 'card'
   },
   bankSlip: String,

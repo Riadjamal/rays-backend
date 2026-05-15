@@ -52,9 +52,17 @@ const auth = async (req, res, next) => {
     req.userPermissions = user.permissions || [];
     next();
   } catch (error) {
-    res.status(401).json({
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        return res.status(401).json({
+            success: false,
+            message: 'Token is invalid or expired'
+        });
+    }
+    
+    console.error("Auth Middleware Error:", error);
+    res.status(500).json({
       success: false,
-      message: 'Token is invalid or expired'
+      message: 'Internal server error during authentication'
     });
   }
 };

@@ -529,8 +529,9 @@ exports.approvePayment = async (req, res, next) => {
     if (payment.type === 'recharge' && payment.agent) {
       const agent = await Agent.findById(payment.agent);
       if (agent) {
-        agent.wallet.balance += payment.amount;
-        agent.wallet.transactions.push({
+        const rechargeAmount = Number(payment.amount);
+        agent.wallet.balance += rechargeAmount;
+        agent.wallet.transactions.unshift({
           type: 'credit',
           amount: payment.amount,
           description: `Wallet recharge confirmed by Accountant (Txn: ${payment.transactionId})`
@@ -559,8 +560,8 @@ exports.addWalletBalance = async (req, res, next) => {
     const { amount } = req.body;
     const agent = await Agent.findById(req.params.id);
 
-    agent.wallet.balance += amount;
-    agent.wallet.transactions.push({
+    agent.wallet.balance += Number(req.body.amount);
+    agent.wallet.transactions.unshift({
       type: 'credit',
       amount,
       description: 'Balance added by admin'
@@ -594,7 +595,7 @@ exports.deductWalletBalance = async (req, res, next) => {
     }
 
     agent.wallet.balance -= amount;
-    agent.wallet.transactions.push({
+    agent.wallet.transactions.unshift({
       type: 'debit',
       amount,
       description: 'Balance deducted by admin'
@@ -663,7 +664,7 @@ exports.processRefund = async (req, res, next) => {
       // Deduct from agent wallet
       const agent = await Agent.findById(refund.agent._id);
       agent.wallet.balance -= refund.amount;
-      agent.wallet.transactions.push({
+      agent.wallet.transactions.unshift({
         type: 'debit',
         amount: refund.amount,
         description: `Refund processed - AED ${refund.amount} transferred to bank`
