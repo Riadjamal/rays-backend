@@ -4,6 +4,7 @@ const Booking = require('../models/Booking');
 const Bus = require('../models/Bus');
 const Driver = require('../models/Driver');
 const Payment = require('../models/Payment');
+const Service = require('../models/Service');
 const mailer = require('../utils/mailer');
 const crypto = require('crypto');
 
@@ -194,7 +195,6 @@ exports.getAgentById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Agent not found' });
     }
 
-    const Service = require('../models/Service');
     const allServices = await Service.find({ isActive: true });
 
     res.json({
