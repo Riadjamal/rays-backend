@@ -1,44 +1,1 @@
-const mongoose = require('mongoose');
-
-let cached = global.mongoose;
-
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
-}
-
-const connectDatabase = async () => {
-  if (cached.conn) {
-    return cached.conn;
-  }
-
-  if (!cached.promise) {
-    const opts = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      family: 4,
-      bufferCommands: false, // CRITICAL: Stop buffering if not connected
-    };
-
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {
-      console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
-      return mongoose;
-    }).catch(err => {
-      cached.promise = null;
-      console.error(`❌ MongoDB Connection Error: ${err.message}`);
-      throw err;
-    });
-  }
-
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
-
-  return cached.conn;
-};
-
-module.exports = connectDatabase;
+const mongoose = require('mongoose');let cached = global.mongoose;if (!cached) {  cached = global.mongoose = { conn: null, promise: null };}const connectDatabase = async () => {  if (cached.conn) {    return cached.conn;  }  if (!cached.promise) {    const opts = {      useNewUrlParser: true,      useUnifiedTopology: true,      serverSelectionTimeoutMS: 10000,      socketTimeoutMS: 45000,      family: 4,      bufferCommands: false,     };    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {      console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);      return mongoose;    }).catch(err => {      cached.promise = null;      console.error(`❌ MongoDB Connection Error: ${err.message}`);      throw err;    });  }  try {    cached.conn = await cached.promise;  } catch (e) {    cached.promise = null;    throw e;  }  return cached.conn;};module.exports = connectDatabase;

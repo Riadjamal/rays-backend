@@ -1,46 +1,1 @@
-const mongoose = require('mongoose');
-
-const seatSchema = new mongoose.Schema({
-  bus: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Bus',
-    required: true
-  },
-  seatNumber: {
-    type: String,
-    required: true
-  },
-  row: {
-    type: Number,
-    required: true
-  },
-  column: {
-    type: Number,
-    required: true
-  },
-  isBooked: {
-    type: Boolean,
-    default: false
-  },
-  bookedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  booking: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Booking'
-  },
-  tripDate: {
-    type: Date,
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
-
-// Compound index to prevent double booking
-seatSchema.index({ bus: 1, seatNumber: 1, tripDate: 1 }, { unique: true });
-
-module.exports = mongoose.model('Seat', seatSchema);
+const mongoose = require('mongoose');const seatSchema = new mongoose.Schema({  bus: {    type: mongoose.Schema.Types.ObjectId,    ref: 'Bus',    required: true  },  seatNumber: {    type: String,    required: true  },  row: {    type: Number,    required: true  },  column: {    type: Number,    required: true  },  isBooked: {    type: Boolean,    default: false  },  bookedBy: {    type: mongoose.Schema.Types.ObjectId,    ref: 'User'  },  booking: {    type: mongoose.Schema.Types.ObjectId,    ref: 'Booking'  },  tripDate: {    type: Date,    required: true  },  createdAt: {    type: Date,    default: Date.now  }});seatSchema.index({ bus: 1, seatNumber: 1, tripDate: 1 }, { unique: true });module.exports = mongoose.model('Seat', seatSchema);

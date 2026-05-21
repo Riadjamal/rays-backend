@@ -1,35 +1,1 @@
-const express = require('express');
-const router = express.Router();
-const upload = require('../utils/upload');
-const auth = require('../middleware/auth');
-
-// GET /api/upload - Test route
-router.get('/test-upload', (req, res) => {
-    res.json({ success: true, message: 'Upload service is active at /api/test-upload!' });
-});
-
-// POST /api/upload - Single file upload
-router.post('/upload', auth, upload.single('file'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-
-    const backendUrl = process.env.BACKEND_URL || '';
-    let fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';
-    
-    // If using memory storage (Vercel/Production), convert to Base64 Data URI
-    if (!req.file.filename && req.file.buffer) {
-        const base64Data = req.file.buffer.toString('base64');
-        fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-    }
-
-    res.json({
-        success: true,
-        data: {
-            url: fileUrl,
-            filename: req.file.filename || 'base64-upload'
-        }
-    });
-});
-
-module.exports = router;
+const express = require('express');const router = express.Router();const upload = require('../utils/upload');const auth = require('../middleware/auth');router.get('/test-upload', (req, res) => {    res.json({ success: true, message: 'Upload service is active at /api/test-upload!' });});router.post('/upload', auth, upload.single('file'), (req, res) => {    if (!req.file) {        return res.status(400).json({ success: false, message: 'No file uploaded' });    }    const backendUrl = process.env.BACKEND_URL || '';    let fileUrl = req.file.filename ? `${backendUrl}/uploads/${req.file.filename}` : '';        // If using memory storage (Vercel/Production), convert to Base64 Data URI    if (!req.file.filename && req.file.buffer) {        const base64Data = req.file.buffer.toString('base64');        fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;    }    res.json({        success: true,        data: {            url: fileUrl,            filename: req.file.filename || 'base64-upload'        }    });});module.exports = router;
