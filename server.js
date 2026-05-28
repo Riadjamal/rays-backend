@@ -25,6 +25,7 @@ const busRoutes = require('./routes/busRoutes');
 const seatRoutes = require('./routes/seatRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const contactRoutes = require('./routes/contactRoutes');
 
 
 const errorHandler = require('./middleware/errorHandler');
@@ -87,6 +88,7 @@ app.use('/api/buses', busRoutes);
 app.use('/api/seats', seatRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/contact', contactRoutes);
 app.use('/api/services', require('./routes/serviceRoutes'));
 app.use('/api/settings', require('./routes/settingRoutes'));
 app.use('/api', uploadRoutes);
