@@ -41,6 +41,9 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:3000',
   'http://localhost:3002',
+  'http://localhost:5173',
+  'https://raysbuses.com',
+  'https://www.raysbuses.com',
   'https://rays-international-bus-frontend.vercel.app',
 ].filter(Boolean);
 

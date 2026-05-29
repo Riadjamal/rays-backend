@@ -1,4 +1,4 @@
-const Inquiry = require('../models/Inquiry');
+const Enquiry = require('../models/Enquiry');
 const { sendNotification } = require('./notificationController');
 const Admin = require('../models/Admin');
 
@@ -6,7 +6,7 @@ exports.submitInquiry = async (req, res, next) => {
   try {
     const { name, phone, email, subject, message } = req.body;
 
-    const newInquiry = await Inquiry.create({
+    const newInquiry = await Enquiry.create({
       name,
       phone,
       email,
@@ -20,7 +20,7 @@ exports.submitInquiry = async (req, res, next) => {
       await sendNotification(
         admin._id,
         'Admin',
-        'system_alert',
+        'admin_alert',
         `New inquiry received from ${name}: ${subject}`
       );
     }
@@ -58,7 +58,7 @@ exports.submitInquiry = async (req, res, next) => {
 
 exports.getInquiries = async (req, res, next) => {
   try {
-    const inquiries = await Inquiry.find().sort({ createdAt: -1 });
+    const inquiries = await Enquiry.find().sort({ createdAt: -1 });
     res.json({
       success: true,
       data: inquiries

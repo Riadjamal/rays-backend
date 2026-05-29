@@ -219,13 +219,11 @@ const Booking = require('../models/Booking');const User = require('../models/Us
         `New booking received: ${booking.bookingNumber} from ${passengerName || `${firstName} ${lastName}`}`);
     }
 
-    await booking.populate('seat')
-      .populate('additionalSeats');
-    await booking.populate('additionalSeats');
-    await booking.populate({
-      path: 'bus',
-      populate: { path: 'driver', select: 'name phone' }
-    });
+    await booking.populate([
+      { path: 'seat' },
+      { path: 'additionalSeats' },
+      { path: 'bus', populate: { path: 'driver', select: 'name phone' } }
+    ]);
 
     res.status(201).json({
       success: true,
