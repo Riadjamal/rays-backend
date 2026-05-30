@@ -165,11 +165,17 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    
     if (detectedRole === 'agent' && !user.isApproved) {
       return res.status(403).json({
         success: false,
         message: 'Agent account not yet approved by admin'
+      });
+    }
+
+    if (detectedRole === 'admin' && role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admins must login via the Admin Portal.'
       });
     }
 
