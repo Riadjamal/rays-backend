@@ -1,1 +1,7 @@
-const express = require('express');const router = express.Router();const bookingController = require('../controllers/bookingController');const auth = require('../middleware/auth');router.get('/track/:pnr', bookingController.trackBooking);router.use(auth);router.post('/', bookingController.createBooking);router.get('/', bookingController.getAllBookings);router.get('/my-bookings', bookingController.getMyBookings);router.get('/unassigned-trip', bookingController.getUnassignedBookings);router.get('/:id', bookingController.getBookingById);router.put('/:id/status', bookingController.updateBookingStatus);router.put('/:id/cancel', bookingController.cancelBooking);router.get('/manage/:bookingNumber', bookingController.getBookingByNumber);router.post('/:id/reschedule-request', bookingController.requestReschedule);module.exports = router;
+const express = require('express');const router = express.Router();const bookingController = require('../controllers/bookingController');const auth = require('../middleware/auth');router.get('/track/:pnr', bookingController.trackBooking);router.use(auth);router.post('/', bookingController.createBooking);router.get('/', bookingController.getAllBookings);router.get('/my-bookings', bookingController.getMyBookings);router.get('/unassigned-trip', bookingController.getUnassignedBookings);router.get('/manage/:bookingNumber', bookingController.getBookingByNumber);
+
+router.get('/:id', bookingController.getBookingById);
+
+router.put('/:id/status', bookingController.updateBookingStatus);
+
+router.put('/:id/cancel', bookingController.cancelBooking);router.post('/:id/reschedule-request', bookingController.requestReschedule);module.exports = router;
