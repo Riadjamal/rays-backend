@@ -26,6 +26,7 @@ const seatRoutes = require('./routes/seatRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+const { verifyTransport } = require('./utils/mailer');
 
 
 const errorHandler = require('./middleware/errorHandler');
@@ -153,6 +154,7 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDatabase();
+    await verifyTransport();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

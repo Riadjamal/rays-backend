@@ -222,26 +222,33 @@ exports.forgotPassword = async (req, res, next) => {
 
     
     try {
-        await mailer.sendMail({
-            to: email,
-            subject: 'Your Rays International Password Reset OTP',
-            html: `
-                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                    <h2 style="color: #2563eb;">Password Reset Request</h2>
-                    <p>Hello,</p>
-                    <p>You requested to reset your password. Use the following 6-digit OTP to proceed:</p>
-                    <div style="background: #f3f4f6; padding: 15px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1f2937; border-radius: 8px; margin: 20px 0;">
-                        ${otp}
-                    </div>
-                    <p>This OTP will expire in 10 minutes.</p>
-                    <p>If you didn't request this, please ignore this email.</p>
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                    <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+      await mailer.sendMail({
+        to: email,
+        subject: 'Your Rays International Password Reset OTP',
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #2563eb;">Password Reset Request</h2>
+                <p>Hello,</p>
+                <p>You requested to reset your password. Use the following 6-digit OTP to proceed:</p>
+                <div style="background: #f3f4f6; padding: 15px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1f2937; border-radius: 8px; margin: 20px 0;">
+                    ${otp}
                 </div>
-            `
-        });
+                <p>This OTP will expire in 10 minutes.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+            </div>
+        `
+      });
     } catch (mailErr) {
-        console.error("Mail Error:", mailErr);
+      user.resetPasswordOTP = undefined;
+      user.resetPasswordOTPExpires = undefined;
+      await user.save();
+
+      return res.status(500).json({
+        success: false,
+        message: 'We could not send the OTP email right now. Please try again later.'
+      });
     }
 
     res.json({
