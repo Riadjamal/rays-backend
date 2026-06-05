@@ -34,6 +34,7 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
+app.set('trust proxy', 1);
 
 app.use(helmet()); 
 
@@ -71,6 +72,8 @@ const isAllowedOrigin = (origin) => {
   if (allowedOrigins.has(normalizedOrigin)) return true;
 
   return (
+    /^http:\/\/localhost:\d+$/.test(normalizedOrigin) ||
+    /^http:\/\/127\.0\.0\.1:\d+$/.test(normalizedOrigin) ||
     normalizedOrigin.endsWith('.vercel.app') ||
     normalizedOrigin.endsWith('.railway.app') ||
     normalizedOrigin.includes('raysbuses.com')
