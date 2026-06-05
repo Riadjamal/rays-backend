@@ -37,8 +37,20 @@ const app = express();
 app.use(helmet()); 
 
 
-const allowedOrigins = [
+const normalizeOrigin = (value) => value ? value.trim().replace(/\/+$/, '') : '';
+
+const envOrigins = [
   process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+  ...(process.env.CLIENT_URLS || '').split(','),
+  ...(process.env.ALLOWED_ORIGINS || '').split(',')
+]
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  ...envOrigins,
   'http://localhost:3000',
   'http://localhost:3002',
   'http://localhost:5173',
@@ -50,25 +62,35 @@ const allowedOrigins = [
   'https://raysbuses.com',
   'https://www.raysbuses.com',
   'https://rays-international-bus-frontend.vercel.app',
-].filter(Boolean);
+].map(normalizeOrigin).filter(Boolean));
 
-app.use(cors({
+const isAllowedOrigin = (origin) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return true;
+  if (allowedOrigins.has(normalizedOrigin)) return true;
+
+  return (
+    normalizedOrigin.endsWith('.vercel.app') ||
+    normalizedOrigin.endsWith('.railway.app') ||
+    normalizedOrigin.includes('raysbuses.com')
+  );
+};
+
+const corsOptions = {
   origin: function(origin, callback) {
-    
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'));
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    console.warn(`CORS blocked origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+app.use(cors(corsOptions));
 
 
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev')); 
