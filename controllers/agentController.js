@@ -528,8 +528,7 @@ exports.updateBooking = async (req, res, next) => {
       travelTime,
       location,
       busId,
-      firstName, lastName, passportNumber, nationality
-    } = req.body;
+      firstName, lastName, passportNumber, nationality, seatNumber, row, column, returnSeatNumber, returnRow, returnColumn } = req.body;
 
     const validation = validateBookingUpdatePayload(req.body);
     if (validation.errors.length) {
@@ -582,6 +581,36 @@ exports.updateBooking = async (req, res, next) => {
       const Seat = require('../models/Seat');
       await Seat.findByIdAndDelete(booking.seat);
       booking.seat = null;
+    }
+
+    if (seatNumber) {
+        const Seat = require('../models/Seat');
+        const depDate = new Date(booking.travelDate);
+        depDate.setUTCHours(0, 0, 0, 0); 
+        
+        if (booking.seat) await Seat.findByIdAndDelete(booking.seat);
+        
+        const seat = await Seat.findOneAndUpdate(
+            { bus: booking.bus, seatNumber, tripDate: depDate },
+            { row, column, isBooked: true, bookedBy: req.userId, booking: booking._id },
+            { upsert: true, new: true }
+        );
+        booking.seat = seat._id;
+    }
+
+    if (booking.isReturnTrip && returnSeatNumber) {
+        const Seat = require('../models/Seat');
+        const retDate = new Date(booking.returnDate);
+        retDate.setUTCHours(0, 0, 0, 0); 
+        
+        if (booking.returnSeat) await Seat.findByIdAndDelete(booking.returnSeat);
+
+        const rSeat = await Seat.findOneAndUpdate(
+            { bus: booking.bus, seatNumber: returnSeatNumber, tripDate: retDate },
+            { row: returnRow, column: returnColumn, isBooked: true, bookedBy: req.userId, booking: booking._id },
+            { upsert: true, new: true }
+        );
+        booking.returnSeat = rSeat._id;
     }
 
     await booking.save();
