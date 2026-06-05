@@ -82,6 +82,8 @@ const seedData = async () => {
             name: 'Rays Express SHJ',
             capacity: 50,
             route: 'SHJ',
+            departureTime: '09:00',
+            startTime: '09:00',
             driver: driver._id,
             seatLayout: {
                 rows: 10,

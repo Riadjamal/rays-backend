@@ -25,7 +25,7 @@ const bookingSchema = new mongoose.Schema({
   },
   travelTime: {
     type: String,
-    default: '08:00 AM'
+    default: ''
   },
   location: {
     type: String,
