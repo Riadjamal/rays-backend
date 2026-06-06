@@ -1,15 +1,5 @@
 const nodemailer = require('nodemailer');
 
-const readMailEnv = (...keys) => {
-    for (const key of keys) {
-        const value = process.env[key];
-        if (typeof value === 'string' && value.trim()) {
-            return value.trim().replace(/^["']|["']$/g, '');
-        }
-    }
-    return '';
-};
-
 const parseBoolean = (value, fallback = false) => {
     if (typeof value === 'boolean') return value;
     if (typeof value !== 'string') return fallback;
@@ -21,69 +11,116 @@ const parseBoolean = (value, fallback = false) => {
 };
 
 const getMailPort = () => {
-    const parsedPort = Number.parseInt(readMailEnv('EMAIL_PORT', 'SMTP_PORT', 'MAIL_PORT'), 10);
+    const parsedPort = Number.parseInt(process.env.EMAIL_PORT, 10);
     return Number.isFinite(parsedPort) ? parsedPort : 465;
 };
 
 const getMailConfig = () => {
     const port = getMailPort();
-    const secure = parseBoolean(readMailEnv('EMAIL_SECURE', 'SMTP_SECURE', 'MAIL_SECURE'), port === 465);
-    const requireTLS = parseBoolean(readMailEnv('EMAIL_REQUIRE_TLS', 'SMTP_REQUIRE_TLS', 'MAIL_REQUIRE_TLS'), port === 587);
-    const rejectUnauthorized = parseBoolean(readMailEnv('EMAIL_TLS_REJECT_UNAUTHORIZED', 'SMTP_TLS_REJECT_UNAUTHORIZED', 'MAIL_TLS_REJECT_UNAUTHORIZED'), false);
-    const host = readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || 'smtp.gmail.com';
-    const user = readMailEnv('EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
-    const pass = readMailEnv('EMAIL_PASSWORD', 'SMTP_PASSWORD', 'MAIL_PASSWORD');
+    const secure = parseBoolean(process.env.EMAIL_SECURE, port === 465);
+    const requireTLS = parseBoolean(process.env.EMAIL_REQUIRE_TLS, port === 587);
+    const rejectUnauthorized = parseBoolean(process.env.EMAIL_TLS_REJECT_UNAUTHORIZED, false);
+
+    // DEBUG: Log what we're using
+    const emailUser = process.env.EMAIL_USER;
+    const emailPassword = process.env.EMAIL_PASSWORD;
+    const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    
+    console.log(`📧 SMTP Config:`);
+    console.log(`   Host: ${emailHost}`);
+    console.log(`   Port: ${port}`);
+    console.log(`   Secure: ${secure}`);
+    console.log(`   User: ${emailUser ? emailUser.substring(0, 5) + '***' : 'NOT SET'}`);
+    console.log(`   Password: ${emailPassword ? emailPassword.length + ' chars' : 'NOT SET'}`);
+    console.log(`   RequireTLS: ${requireTLS}`);
 
     return {
-        host,
+        host: emailHost,
         port,
         secure,
         auth: {
-            user,
-            pass
+            user: emailUser,
+            pass: emailPassword
         },
         requireTLS,
-        connectionTimeout: Number.parseInt(readMailEnv('EMAIL_CONNECTION_TIMEOUT_MS', 'SMTP_CONNECTION_TIMEOUT_MS', 'MAIL_CONNECTION_TIMEOUT_MS'), 10) || 15000,
-        greetingTimeout: Number.parseInt(readMailEnv('EMAIL_GREETING_TIMEOUT_MS', 'SMTP_GREETING_TIMEOUT_MS', 'MAIL_GREETING_TIMEOUT_MS'), 10) || 15000,
-        socketTimeout: Number.parseInt(readMailEnv('EMAIL_SOCKET_TIMEOUT_MS', 'SMTP_SOCKET_TIMEOUT_MS', 'MAIL_SOCKET_TIMEOUT_MS'), 10) || 20000,
+        connectionTimeout: 45000,
+        greetingTimeout: 45000,
+        socketTimeout: 45000,
+        maxConnections: 1,
+        maxMessages: 5,
+        rateDelta: 1000,
+        rateLimit: 5,
         tls: {
             rejectUnauthorized,
-            servername: readMailEnv('EMAIL_TLS_SERVERNAME', 'SMTP_TLS_SERVERNAME', 'MAIL_TLS_SERVERNAME') || host
+            servername: emailHost
         }
     };
 };
 
-const transporter = nodemailer.createTransport(getMailConfig());
+let transporter = null;
 
-const getMailboxUser = () => readMailEnv('EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
-const getMailboxInbox = () => readMailEnv('EMAIL_TO', 'SMTP_TO', 'MAIL_TO', 'EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
+const getTransporter = () => {
+    if (!transporter) {
+        transporter = nodemailer.createTransport(getMailConfig());
+    }
+    return transporter;
+};
 
 const getFromAddress = (fallbackName = 'Rays International') => {
-    const senderEmail = readMailEnv('EMAIL_FROM', 'SMTP_FROM', 'MAIL_FROM') || getMailboxUser();
+    const senderEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER;
     return `"${fallbackName}" <${senderEmail}>`;
 };
 
-const sendMail = async (options) => {
+const sendMailWithRetry = async (options, retries = 3) => {
     const mailOptions = {
         from: getFromAddress('Rays International Support'),
         ...options
     };
 
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const result = await getTransporter().sendMail(mailOptions);
+            console.log(`✅ Email sent to ${options.to} (attempt ${attempt})`);
+            return result;
+        } catch (error) {
+            console.error(`❌ Email send attempt ${attempt}/${retries} failed for ${options.to}:`, error.message);
+            
+            if (attempt === retries) {
+                // Last attempt failed
+                console.error(`⚠️ Failed to send email to ${options.to} after ${retries} attempts`);
+                throw error;
+            }
+            
+            // Wait before retry (exponential backoff)
+            const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`⏳ Retrying in ${waitTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+    }
+};
+
+const sendMail = async (options) => {
     try {
-        return await transporter.sendMail(mailOptions);
+        return await sendMailWithRetry(options, 3);
     } catch (error) {
-        console.error('Email sending failed:', error);
+        console.error('Email sending failed after all retries:', error.message);
         throw error;
     }
 };
 
 const verifyTransport = async () => {
     try {
-        await transporter.verify();
-        console.log(`SMTP transport verified for ${readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || 'smtp.gmail.com'}:${getMailPort()}`);
+        console.log('🔍 Attempting SMTP verification...');
+        await getTransporter().verify();
+        console.log(`✅ SMTP transport verified for ${process.env.EMAIL_HOST || 'smtp.gmail.com'}:${getMailPort()}`);
         return true;
     } catch (error) {
-        console.error('SMTP transport verification failed:', error.message);
+        console.error('⚠️ SMTP transport verification failed:', error.message);
+        console.error('📝 Troubleshooting:');
+        console.error('   1. Check EMAIL_PASSWORD is a Gmail App Password (16 chars), not your regular password');
+        console.error('   2. Verify EMAIL_USER is correct');
+        console.error('   3. Ensure 2-Step Verification is enabled on your Gmail account');
+        console.error('   4. Check if IPv6 egress is enabled in Railway');
         return false;
     }
 };
@@ -131,8 +168,6 @@ exports.sendVisaApproved = async (email, bookingDetails) => {
 
 exports.sendMail = sendMail;
 exports.verifyTransport = verifyTransport;
-exports.getMailboxUser = getMailboxUser;
-exports.getMailboxInbox = getMailboxInbox;
 
 exports.sendAgentInvitation = async (email, agentDetails) => {
     const setupLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/setup-password?token=${agentDetails.token}&email=${email}`;
@@ -184,3 +219,4 @@ exports.sendAgentInvitation = async (email, agentDetails) => {
 
     console.log(`Agent invitation sent to ${email}`);
 };
+
