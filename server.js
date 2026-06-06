@@ -153,12 +153,26 @@ app.use(errorHandler);
 
 
 const PORT = process.env.PORT || 5000;
+const shouldVerifySmtpOnStartup = `${process.env.VERIFY_SMTP_ON_STARTUP || 'true'}`
+  .trim()
+  .toLowerCase() !== 'false';
+
+const kickOffSmtpVerification = () => {
+  if (!shouldVerifySmtpOnStartup) {
+    console.log('SMTP startup verification skipped by configuration');
+    return;
+  }
+
+  verifyTransport().catch((error) => {
+    console.error('SMTP startup verification failed unexpectedly:', error.message);
+  });
+};
 
 const startServer = async () => {
   try {
     await connectDatabase();
-    await verifyTransport();
     app.listen(PORT, () => {
+      kickOffSmtpVerification();
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
