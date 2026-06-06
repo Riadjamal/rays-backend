@@ -30,9 +30,9 @@ const getMailConfig = () => {
             pass: process.env.EMAIL_PASSWORD
         },
         requireTLS,
-        connectionTimeout: Number.parseInt(process.env.EMAIL_CONNECTION_TIMEOUT_MS, 10) || 15000,
-        greetingTimeout: Number.parseInt(process.env.EMAIL_GREETING_TIMEOUT_MS, 10) || 15000,
-        socketTimeout: Number.parseInt(process.env.EMAIL_SOCKET_TIMEOUT_MS, 10) || 20000,
+        connectionTimeout: Number.parseInt(process.env.EMAIL_CONNECTION_TIMEOUT_MS, 10) || 30000,
+        greetingTimeout: Number.parseInt(process.env.EMAIL_GREETING_TIMEOUT_MS, 10) || 30000,
+        socketTimeout: Number.parseInt(process.env.EMAIL_SOCKET_TIMEOUT_MS, 10) || 30000,
         tls: {
             rejectUnauthorized,
             servername: process.env.EMAIL_TLS_SERVERNAME || process.env.EMAIL_HOST || 'smtp.gmail.com'
@@ -64,10 +64,11 @@ const sendMail = async (options) => {
 const verifyTransport = async () => {
     try {
         await transporter.verify();
-        console.log(`SMTP transport verified for ${process.env.EMAIL_HOST || 'smtp.gmail.com'}:${getMailPort()}`);
+        console.log(`✅ SMTP transport verified for ${process.env.EMAIL_HOST || 'smtp.gmail.com'}:${getMailPort()}`);
         return true;
     } catch (error) {
-        console.error('SMTP transport verification failed:', error.message);
+        console.error('⚠️ SMTP transport verification failed:', error.message);
+        console.error('Note: Email sending may still work. Check your EMAIL_PASSWORD is a Gmail App Password, not your regular password.');
         return false;
     }
 };
@@ -166,3 +167,4 @@ exports.sendAgentInvitation = async (email, agentDetails) => {
 
     console.log(`Agent invitation sent to ${email}`);
 };
+
