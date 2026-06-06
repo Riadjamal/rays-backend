@@ -12,7 +12,7 @@ exports.submitInquiry = async (req, res, next) => {
     }
 
     await mailer.sendMail({
-      to: process.env.EMAIL_USER,
+      to: mailer.getMailboxInbox(),
       replyTo: email,
       subject: `[Contact Inquiry] ${subject}`,
       html: `
