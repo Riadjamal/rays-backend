@@ -30,9 +30,13 @@ const getMailConfig = () => {
             pass: process.env.EMAIL_PASSWORD
         },
         requireTLS,
-        connectionTimeout: Number.parseInt(process.env.EMAIL_CONNECTION_TIMEOUT_MS, 10) || 15000,
-        greetingTimeout: Number.parseInt(process.env.EMAIL_GREETING_TIMEOUT_MS, 10) || 15000,
-        socketTimeout: Number.parseInt(process.env.EMAIL_SOCKET_TIMEOUT_MS, 10) || 20000,
+        connectionTimeout: 45000,
+        greetingTimeout: 45000,
+        socketTimeout: 45000,
+        maxConnections: 1,
+        maxMessages: 5,
+        rateDelta: 1000,
+        rateLimit: 5,
         tls: {
             rejectUnauthorized,
             servername: process.env.EMAIL_TLS_SERVERNAME || process.env.EMAIL_HOST || 'smtp.gmail.com'
@@ -40,34 +44,68 @@ const getMailConfig = () => {
     };
 };
 
-const transporter = nodemailer.createTransport(getMailConfig());
+let transporter = null;
+
+const getTransporter = () => {
+    if (!transporter) {
+        transporter = nodemailer.createTransport(getMailConfig());
+    }
+    return transporter;
+};
 
 const getFromAddress = (fallbackName = 'Rays International') => {
     const senderEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER;
     return `"${fallbackName}" <${senderEmail}>`;
 };
 
-const sendMail = async (options) => {
+const sendMailWithRetry = async (options, retries = 3) => {
     const mailOptions = {
         from: getFromAddress('Rays International Support'),
         ...options
     };
 
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const result = await getTransporter().sendMail(mailOptions);
+            console.log(`✅ Email sent to ${options.to} (attempt ${attempt})`);
+            return result;
+        } catch (error) {
+            console.error(`❌ Email send attempt ${attempt}/${retries} failed for ${options.to}:`, error.message);
+            
+            if (attempt === retries) {
+                // Last attempt failed
+                console.error(`⚠️ Failed to send email to ${options.to} after ${retries} attempts`);
+                throw error;
+            }
+            
+            // Wait before retry (exponential backoff)
+            const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`⏳ Retrying in ${waitTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+    }
+};
+
+const sendMail = async (options) => {
     try {
-        return await transporter.sendMail(mailOptions);
+        return await sendMailWithRetry(options, 3);
     } catch (error) {
-        console.error('Email sending failed:', error);
+        console.error('Email sending failed after all retries:', error.message);
         throw error;
     }
 };
 
 const verifyTransport = async () => {
     try {
-        await transporter.verify();
-        console.log(`SMTP transport verified for ${process.env.EMAIL_HOST || 'smtp.gmail.com'}:${getMailPort()}`);
+        await getTransporter().verify();
+        console.log(`✅ SMTP transport verified for ${process.env.EMAIL_HOST || 'smtp.gmail.com'}:${getMailPort()}`);
         return true;
     } catch (error) {
-        console.error('SMTP transport verification failed:', error.message);
+        console.error('⚠️ SMTP transport verification failed:', error.message);
+        console.error('📝 Troubleshooting:');
+        console.error('   1. Check EMAIL_PASSWORD is a Gmail App Password (16 chars), not your regular password');
+        console.error('   2. Verify EMAIL_USER is correct');
+        console.error('   3. Ensure 2-Step Verification is enabled on your Gmail account');
         return false;
     }
 };
@@ -166,3 +204,4 @@ exports.sendAgentInvitation = async (email, agentDetails) => {
 
     console.log(`Agent invitation sent to ${email}`);
 };
+
