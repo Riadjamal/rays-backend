@@ -159,12 +159,16 @@ const shouldVerifySmtpOnStartup = `${process.env.VERIFY_SMTP_ON_STARTUP || 'true
 
 const kickOffSmtpVerification = () => {
   if (!shouldVerifySmtpOnStartup) {
-    console.log('SMTP startup verification skipped by configuration');
+    console.log('⚠️  SMTP startup verification skipped by configuration');
     return;
   }
 
-  verifyTransport().catch((error) => {
-    console.error('SMTP startup verification failed unexpectedly:', error.message);
+  verifyTransport().then((success) => {
+    if (!success) {
+      console.warn('⚠️  SMTP verification failed - email sending may not work');
+    }
+  }).catch((error) => {
+    console.error('❌ SMTP startup verification failed unexpectedly:', error.message);
   });
 };
 
@@ -185,3 +189,4 @@ const startServer = async () => {
 startServer();
 
 module.exports = app;
+

@@ -4,7 +4,7 @@ const readMailEnv = (...keys) => {
     for (const key of keys) {
         const value = process.env[key];
         if (typeof value === 'string' && value.trim()) {
-            return value.trim().replace(/^["']|["']$/g, '');
+            return value.trim().replace(/^[\"']|[\"']$/g, '');
         }
     }
     return '';
@@ -70,9 +70,13 @@ const sendMail = async (options) => {
     };
 
     try {
-        return await transporter.sendMail(mailOptions);
+        const result = await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent successfully to ${options.to}:`, result.messageId);
+        return result;
     } catch (error) {
-        console.error('Email sending failed:', error);
+        console.error(`❌ Email sending failed to ${options.to}:`, error.message);
+        console.error('Error code:', error.code);
+        console.error('Error response:', error.response);
         throw error;
     }
 };
@@ -80,10 +84,21 @@ const sendMail = async (options) => {
 const verifyTransport = async () => {
     try {
         await transporter.verify();
-        console.log(`SMTP transport verified for ${readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || 'smtp.gmail.com'}:${getMailPort()}`);
+        const config = getMailConfig();
+        console.log(`✅ SMTP transport verified for ${config.host}:${config.port}`);
+        console.log(`   User: ${config.auth.user}`);
+        console.log(`   Secure: ${config.secure}, RequireTLS: ${config.requireTLS}`);
         return true;
     } catch (error) {
-        console.error('SMTP transport verification failed:', error.message);
+        console.error('❌ SMTP transport verification failed:', error.message);
+        console.error('Error code:', error.code);
+        const config = getMailConfig();
+        console.error('Config used:');
+        console.error(`   Host: ${config.host}`);
+        console.error(`   Port: ${config.port}`);
+        console.error(`   User: ${config.auth.user}`);
+        console.error(`   Secure: ${config.secure}`);
+        console.error(`   RequireTLS: ${config.requireTLS}`);
         return false;
     }
 };
@@ -184,3 +199,4 @@ exports.sendAgentInvitation = async (email, agentDetails) => {
 
     console.log(`Agent invitation sent to ${email}`);
 };
+
