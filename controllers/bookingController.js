@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const Seat = require('../models/Seat');
 const Bus = require('../models/Bus');
 const { validateBookingPayload } = require('../utils/bookingValidation');
+const { syncCompletedBookings } = require('../utils/tripTiming');
 
 const resolveBookingLocation = (location, route = '') => {
   if (location) return location;
@@ -379,6 +380,7 @@ exports.getAllBookings = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
+    await syncCompletedBookings(bookings);
 
     const count = await Booking.countDocuments(query);
 
@@ -505,6 +507,7 @@ exports.getMyBookings = async (req, res, next) => {
       .populate('additionalSeats')
       .populate('payment')
       .sort({ createdAt: -1 });
+    await syncCompletedBookings(bookings);
 
     res.json({
       success: true,
@@ -563,6 +566,7 @@ exports.getBookingByNumber = async (req, res, next) => {
       })
       .populate('seat')
       .populate('additionalSeats');
+    if (booking) { await syncCompletedBookings([booking]); }
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -620,6 +624,7 @@ exports.trackBooking = async (req, res, next) => {
       .populate('seat')
       .populate('additionalSeats')
       .populate('visa');
+    if (booking) { await syncCompletedBookings([booking]); }
 
     if (!booking) {
       return res.status(404).json({

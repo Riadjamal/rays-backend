@@ -66,6 +66,15 @@ const driverSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  currentTripBus: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Bus',
+    default: null
+  },
+  currentTripDate: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

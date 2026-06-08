@@ -6,6 +6,7 @@ const Seat = require('../models/Seat');
 const Payment = require('../models/Payment');
 const Visa = require('../models/Visa');
 const { validateBookingPayload, validateBookingUpdatePayload } = require('../utils/bookingValidation');
+const { hasTripDeparted, syncCompletedBookings } = require('../utils/tripTiming');
 exports.getDashboard = async (req, res, next) => {
   try {
     const agent = await Agent.findById(req.userId);
@@ -80,12 +81,15 @@ exports.updateProfile = async (req, res, next) => {
 exports.getWallet = async (req, res, next) => {
   try {
     const agent = await Agent.findById(req.userId);
+    const RefundRequest = require('../models/RefundRequest');
+    const refunds = await RefundRequest.find({ agent: req.userId }).sort({ createdAt: -1 });
 
     res.json({
       success: true,
       data: {
         balance: agent.wallet.balance,
-        transactions: agent.wallet.transactions
+        transactions: agent.wallet.transactions,
+        refunds
       }
     });
   } catch (error) {
@@ -410,6 +414,7 @@ exports.getBookings = async (req, res, next) => {
       .populate('returnSeat')
       .populate('payment')
       .sort({ createdAt: -1 });
+    await syncCompletedBookings(bookings);
 
     res.json({
       success: true,
@@ -710,4 +715,5 @@ exports.getServices = async (req, res, next) => {
     next(error);
   }
 };
+
 

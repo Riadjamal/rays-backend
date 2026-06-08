@@ -1,4 +1,148 @@
-const User = require('../models/User');const Agent = require('../models/Agent');const Booking = require('../models/Booking');const Bus = require('../models/Bus');const Driver = require('../models/Driver');const Payment = require('../models/Payment');const Service = require('../models/Service');const mailer = require('../utils/mailer');const crypto = require('crypto');exports.getDashboard = async (req, res, next) => {  try {    const totalUsers = await User.countDocuments() || 0;    const totalAgents = await Agent.countDocuments() || 0;    const totalBookings = await Booking.countDocuments() || 0;    const pendingBookings = await Booking.countDocuments({ status: 'pending' }) || 0;    const totalBuses = await Bus.countDocuments({ isActive: true }) || 0;        const RefundRequest = require('../models/RefundRequest');    const pendingRefunds = await RefundRequest.countDocuments({ status: 'pending' }) || 0;    const pendingReschedules = await Booking.countDocuments({ "rescheduleRequest.status": 'pending' }) || 0;    let totalRevenue = 0;    let analyticsData = [];    try {        const revenueResult = await Booking.aggregate([            { $match: { status: { $ne: 'cancelled' } } },            { $group: { _id: null, total: { $sum: "$totalAmount" } } }        ]);        totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;        analyticsData = await Booking.aggregate([            { $match: { status: { $ne: 'cancelled' }, createdAt: { $exists: true } } },            {                $group: {                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },                    revenue: { $sum: "$totalAmount" },                    bookings: { $sum: 1 }                }            },            { $sort: { "_id": 1 } },            { $limit: 7 }        ]);    } catch (aggErr) {        console.error("Aggregation Error:", aggErr);    }    res.json({      success: true,      data: {        users: totalUsers,        agents: totalAgents,        bookings: totalBookings,        pendingBookings,        totalBuses,        pendingRefunds,        pendingReschedules,        revenue: totalRevenue,        analyticsData: analyticsData.map(d => ({            name: d._id,            revenue: d.revenue,            bookings: d.bookings        })) || []      }    });  } catch (error) {    next(error);  }};exports.getUsers = async (req, res, next) => {  try {    const users = await User.find()      .select('-password')      .sort({ createdAt: -1 });    res.json({      success: true,      data: users    });  } catch (error) {    next(error);  }};exports.blockUser = async (req, res, next) => {  try {    const user = await User.findById(req.params.id);    user.isBlocked = !user.isBlocked;    await user.save();    res.json({      success: true,      message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,      data: user    });  } catch (error) {    next(error);  }};exports.createUser = async (req, res, next) => {  try {    const { name, email, phone, password, role } = req.body;    const existingUser = await User.findOne({ email });    if (existingUser) {      return res.status(400).json({        success: false,        message: 'User with this email already exists'      });    }    const user = await User.create({      name,      email,      phone,      password,      role,      permissions: req.body.permissions || []    });    res.status(201).json({      success: true,      message: 'Internal user created successfully',      data: {        _id: user._id,        name: user.name,        email: user.email,        role: user.role,        permissions: user.permissions      }    });  } catch (error) {    next(error);  }};
+const User = require('../models/User');
+const Agent = require('../models/Agent');
+const Booking = require('../models/Booking');
+const Bus = require('../models/Bus');
+const Driver = require('../models/Driver');
+const Payment = require('../models/Payment');
+const Service = require('../models/Service');
+const mailer = require('../utils/mailer');
+const crypto = require('crypto');
+const { syncCompletedBookings } = require('../utils/tripTiming');
+
+
+exports.getDashboard = async (req, res, next) => {
+  try {
+    const totalUsers = await User.countDocuments() || 0;
+    const totalAgents = await Agent.countDocuments() || 0;
+    const totalBookings = await Booking.countDocuments() || 0;
+    const pendingBookings = await Booking.countDocuments({ status: 'pending' }) || 0;
+    const totalBuses = await Bus.countDocuments({ isActive: true }) || 0;
+    
+    const RefundRequest = require('../models/RefundRequest');
+    const pendingRefunds = await RefundRequest.countDocuments({ status: 'pending' }) || 0;
+    const pendingReschedules = await Booking.countDocuments({ "rescheduleRequest.status": 'pending' }) || 0;
+
+    let totalRevenue = 0;
+    let analyticsData = [];
+
+    try {
+        const revenueResult = await Booking.aggregate([
+            { $match: { status: { $ne: 'cancelled' } } },
+            { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]);
+        totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+        analyticsData = await Booking.aggregate([
+            { $match: { status: { $ne: 'cancelled' }, createdAt: { $exists: true } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    revenue: { $sum: "$totalAmount" },
+                    bookings: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } },
+            { $limit: 7 }
+        ]);
+    } catch (aggErr) {
+        console.error("Aggregation Error:", aggErr);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        users: totalUsers,
+        agents: totalAgents,
+        bookings: totalBookings,
+        pendingBookings,
+        totalBuses,
+        pendingRefunds,
+        pendingReschedules,
+        revenue: totalRevenue,
+        analyticsData: analyticsData.map(d => ({
+            name: d._id,
+            revenue: d.revenue,
+            bookings: d.bookings
+        })) || []
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getUsers = async (req, res, next) => {
+  try {
+    const users = await User.find()
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.blockUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    user.isBlocked = !user.isBlocked;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.createUser = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, role } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role,
+      permissions: req.body.permissions || []
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Internal user created successfully',
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 exports.updateUser = async (req, res, next) => {
   try {
     const { name, email, phone, role, permissions } = req.body;
@@ -31,8 +175,689 @@ exports.updateUser = async (req, res, next) => {
   }
 };
 
-exports.updateUserPermissions = async (req, res, next) => {  try {    const { permissions } = req.body;    const user = await User.findById(req.params.id);        if (!user) {      return res.status(404).json({        success: false,        message: 'User not found'      });    }    user.permissions = permissions;    await user.save();    res.json({      success: true,      message: 'Permissions updated successfully',      data: user    });  } catch (error) {    next(error);  }};exports.getAgents = async (req, res, next) => {  try {    const agents = await Agent.find()      .select('-password')      .sort({ createdAt: -1 });    res.json({      success: true,      data: agents    });  } catch (error) {    next(error);  }};exports.getAgentById = async (req, res, next) => {  try {    const agent = await Agent.findById(req.params.id)      .populate('productPricing.service')      .select('-password');        if (!agent) {      return res.status(404).json({ success: false, message: 'Agent not found' });    }    const allServices = await Service.find({ isActive: true });    res.json({      success: true,      data: {        agent,        allServices      }    });  } catch (error) {    next(error);  }};exports.updateAgentProducts = async (req, res, next) => {  try {    const { productPricing } = req.body;    const agent = await Agent.findById(req.params.id);    if (!agent) {      return res.status(404).json({ success: false, message: 'Agent not found' });    }    agent.productPricing = productPricing;    await agent.save();    res.json({      success: true,      message: 'Agent product pricing updated successfully',      data: agent    });  } catch (error) {    next(error);  }};exports.approveAgent = async (req, res, next) => {  try {    const agent = await Agent.findById(req.params.id);    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });        agent.isApproved = true;    agent.isBlocked = false;     await agent.save();    res.json({      success: true,      message: 'Agent approved and activated successfully',      data: agent    });  } catch (error) {    next(error);  }};exports.createAgent = async (req, res, next) => {  try {    const { companyName, contactPerson, email, phone, companyDetails, tradeLicense, address } = req.body;    const finalCompanyDetails = companyDetails || { tradeLicense: tradeLicense || '', address: address || '' };    const existingAgent = await Agent.findOne({ email });    if (existingAgent) {      return res.status(400).json({        success: false,        message: 'Agent with this email already exists'      });    }        const setupToken = crypto.randomBytes(32).toString('hex');    const agent = await Agent.create({      companyName,      contactPerson,      email,      phone,      companyDetails: finalCompanyDetails,      setupPasswordToken: setupToken,      setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000,       isApproved: true    });        mailer.sendAgentInvitation(email, {        companyName,        contactPerson,        token: setupToken    });    res.status(201).json({      success: true,      message: 'Agent created successfully. Invitation email sent.',      data: agent    });  } catch (error) {    next(error);  }};exports.getDrivers = async (req, res, next) => {  try {    const drivers = await Driver.find()      .select('-password')      .sort({ createdAt: -1 });    res.json({      success: true,      data: drivers    });  } catch (error) {    next(error);  }};exports.createDriver = async (req, res, next) => {  try {    const { name, email, phone, password, licenseNumber, licenseExpiry } = req.body;    const existingDriver = await Driver.findOne({ $or: [{ email }, { phone }] });    if (existingDriver) {      return res.status(400).json({        success: false,        message: 'Driver with this email or phone already exists'      });    }    const driver = await Driver.create({      name,      email,      phone,      password,      licenseNumber,      licenseExpiry    });    res.status(201).json({      success: true,      message: 'Driver created successfully',      data: {        _id: driver._id,        name: driver.name,        email: driver.email,        phone: driver.phone      }    });  } catch (error) {    next(error);  }};exports.rejectAgent = async (req, res, next) => {  try {    const agent = await Agent.findById(req.params.id);    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });        agent.isBlocked = true;    agent.isApproved = false;     await agent.save();    res.json({      success: true,      message: 'Agent blocked and rejected successfully',      data: agent    });  } catch (error) {    next(error);  }};exports.deleteAgent = async (req, res, next) => {  try {    console.log(`[Admin] Permanent deletion requested for agent ID: ${req.params.id}`);    const agent = await Agent.findByIdAndDelete(req.params.id);    if (!agent) {      console.warn(`[Admin] Delete failed: Agent ${req.params.id} not found`);      return res.status(404).json({ success: false, message: 'Agent not found' });    }    console.log(`[Admin] Successfully deleted agent: ${agent.companyName} (${agent.email})`);    res.json({      success: true,      message: 'Agent deleted permanently'    });  } catch (error) {    console.error(`[Admin] Error deleting agent ${req.params.id}:`, error);    next(error);  }};exports.getBookings = async (req, res, next) => {  try {    const { status, source, startDate, endDate, search, page = 1, limit = 20 } = req.query;    let query = {};    if (status) query.status = status;        if (source === 'agent') {        query.agent = { $exists: true };    } else if (source === 'user') {        query.agent = { $exists: false };    }    if (startDate || endDate) {        query.travelDate = {};        if (startDate) query.travelDate.$gte = new Date(startDate);        if (endDate) query.travelDate.$lte = new Date(endDate);    }    if (search) {        query.$or = [            { bookingNumber: { $regex: search, $options: 'i' } },            { firstName: { $regex: search, $options: 'i' } },            { lastName: { $regex: search, $options: 'i' } },            { passengerName: { $regex: search, $options: 'i' } },            { "passportDetails.number": { $regex: search, $options: 'i' } }        ];    }    const bookings = await Booking.find(query)      .populate('user', 'name email phone')      .populate('agent', 'companyName email phone')      .populate('visa')      .populate('bus')      .populate('seat')
-      .populate('additionalSeats')      .populate('payment')      .sort({ createdAt: -1 })      .limit(limit * 1)      .skip((page - 1) * limit);    const count = await Booking.countDocuments(query);    res.json({      success: true,      data: {        bookings,        totalPages: Math.ceil(count / limit),        currentPage: page,        total: count      }    });  } catch (error) {    next(error);  }};exports.updateBookingStatus = async (req, res, next) => {  try {    const { status } = req.body;    const booking = await Booking.findById(req.params.id).populate('user', 'name email').populate('agent', 'companyName email');    if (!booking) {      return res.status(404).json({ success: false, message: 'Booking not found' });    }    const previousStatus = booking.status;    booking.status = status;    await booking.save();        const { sendNotification } = require('./notificationController');    const statusMessages = {      confirmed: `✅ Your booking ${booking.bookingNumber} has been approved and confirmed!`,      processing: `🔄 Your booking ${booking.bookingNumber} is now being processed.`,      cancelled: `❌ Your booking ${booking.bookingNumber} has been cancelled.`,      pending: `⏳ Your booking ${booking.bookingNumber} status has been updated to pending.`    };    const notificationMessage = statusMessages[status] || `Your booking ${booking.bookingNumber} status updated to ${status}.`;        if (booking.user) {      await sendNotification(booking.user._id, 'User', 'booking_confirmation', notificationMessage);    }        if (booking.agent) {      await sendNotification(booking.agent._id, 'Agent', 'booking_confirmation', notificationMessage);    }    res.json({      success: true,      message: 'Booking status updated successfully',      data: booking    });  } catch (error) {    next(error);  }};exports.getPayments = async (req, res, next) => {  try {    const payments = await Payment.find()      .populate('booking')      .populate('user')      .populate('agent')      .sort({ status: 1, createdAt: -1 });     res.json({      success: true,      data: payments    });  } catch (error) {    next(error);  }};exports.approvePayment = async (req, res, next) => {  try {    const payment = await Payment.findById(req.params.id);    if (!payment) {      return res.status(404).json({ success: false, message: 'Payment record not found' });    }    if (payment.status !== 'pending') {      return res.status(400).json({ success: false, message: 'Payment is already processed' });    }    if (payment.type === 'recharge' && payment.agent) {      const agent = await Agent.findById(payment.agent);      if (agent) {        const rechargeAmount = Number(payment.amount);        agent.wallet.balance += rechargeAmount;        agent.wallet.transactions.unshift({          type: 'credit',          amount: payment.amount,          description: `Wallet recharge confirmed by Accountant (Txn: ${payment.transactionId})`        });        await agent.save();      }    }    payment.status = 'completed';    await payment.save();    res.json({      success: true,      message: 'Payment confirmed and balance updated',      data: payment    });  } catch (error) {    next(error);  }};exports.addWalletBalance = async (req, res, next) => {  try {    const { amount } = req.body;    const agent = await Agent.findById(req.params.id);    agent.wallet.balance += Number(req.body.amount);    agent.wallet.transactions.unshift({      type: 'credit',      amount,      description: 'Balance added by admin'    });    await agent.save();    res.json({      success: true,      message: 'Balance added successfully',      data: {        balance: agent.wallet.balance      }    });  } catch (error) {    next(error);  }};exports.deductWalletBalance = async (req, res, next) => {  try {    const { amount } = req.body;    const agent = await Agent.findById(req.params.id);    if (agent.wallet.balance < amount) {      return res.status(400).json({        success: false,        message: 'Insufficient balance'      });    }    agent.wallet.balance -= amount;    agent.wallet.transactions.unshift({      type: 'debit',      amount,      description: 'Balance deducted by admin'    });    await agent.save();    res.json({      success: true,      message: 'Balance deducted successfully',      data: {        balance: agent.wallet.balance      }    });  } catch (error) {    next(error);  }};exports.getRefunds = async (req, res, next) => {  try {    const RefundRequest = require('../models/RefundRequest');    const refunds = await RefundRequest.find()      .populate('agent', 'companyName email phone')      .populate('processedBy', 'name email')      .sort({ createdAt: -1 });    res.json({      success: true,      data: refunds    });  } catch (error) {    next(error);  }};exports.processRefund = async (req, res, next) => {  try {    const { status, transferSlip, rejectionReason } = req.body;    const RefundRequest = require('../models/RefundRequest');        const refund = await RefundRequest.findById(req.params.id).populate('agent');        if (!refund) {      return res.status(404).json({        success: false,        message: 'Refund request not found'      });    }    if (refund.status !== 'pending') {      return res.status(400).json({        success: false,        message: 'Refund request already processed'      });    }    refund.status = status;    refund.processedBy = req.userId;        if (status === 'approved') {      refund.transferSlip = transferSlip;                  const agent = await Agent.findById(refund.agent._id);      agent.wallet.balance -= refund.amount;      agent.wallet.transactions.unshift({        type: 'debit',        amount: refund.amount,        description: `Refund processed - AED ${refund.amount} transferred to bank`      });      await agent.save();            mailer.sendMail({        to: refund.agent.email,        subject: 'Refund Request Approved - Rays International',        html: `          <div style="font-family: sans-serif; padding: 20px;">            <h2 style="color: #10b981;">Refund Approved</h2>            <p>Dear ${refund.agent.companyName},</p>            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been approved and processed.</p>            <p>The amount has been transferred to your registered bank account.</p>            <p>Thank you for your business!</p>            <hr />            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>          </div>        `      });    } else if (status === 'rejected') {      refund.rejectionReason = rejectionReason;                  mailer.sendMail({        to: refund.agent.email,        subject: 'Refund Request Rejected - Rays International',        html: `          <div style="font-family: sans-serif; padding: 20px;">            <h2 style="color: #ef4444;">Refund Request Rejected</h2>            <p>Dear ${refund.agent.companyName},</p>            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been rejected.</p>            <p><strong>Reason:</strong> ${rejectionReason}</p>            <p>If you have any questions, please contact our finance team.</p>            <hr />            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>          </div>        `      });    }    await refund.save();    res.json({      success: true,      message: `Refund ${status} successfully`,      data: refund    });  } catch (error) {    next(error);  }};exports.getSettings = async (req, res, next) => {  try {    const Setting = require('../models/Setting');    const settings = await Setting.find();    res.json({      success: true,      data: settings    });  } catch (error) {    next(error);  }};exports.updateSetting = async (req, res, next) => {  try {    const { key, value } = req.body;    const Setting = require('../models/Setting');        let setting = await Setting.findOne({ key });    if (setting) {      setting.value = value;      setting.updatedBy = req.userId;      await setting.save();    } else {      setting = await Setting.create({        key,        value,        updatedBy: req.userId      });    }    res.json({      success: true,      message: 'Setting updated successfully',      data: setting    });  } catch (error) {    next(error);  }};exports.getServices = async (req, res, next) => {  try {    const Service = require('../models/Service');    const services = await Service.find().sort({ createdAt: -1 });    res.json({      success: true,      data: services    });  } catch (error) {    next(error);  }};exports.createService = async (req, res, next) => {  try {    const Service = require('../models/Service');    const service = await Service.create(req.body);    res.status(201).json({      success: true,      message: 'Service created successfully',      data: service    });  } catch (error) {    next(error);  }};exports.updateService = async (req, res, next) => {  try {    const Service = require('../models/Service');    const service = await Service.findByIdAndUpdate(req.params.id, req.body, { new: true });    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });        res.json({      success: true,      message: 'Service updated successfully',      data: service    });  } catch (error) {    next(error);  }};exports.deleteService = async (req, res, next) => {  try {    const Service = require('../models/Service');    const service = await Service.findByIdAndDelete(req.params.id);    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });        res.json({      success: true,      message: 'Service deleted successfully'    });  } catch (error) {    next(error);  }};
+exports.updateUserPermissions = async (req, res, next) => {
+  try {
+    const { permissions } = req.body;
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.permissions = permissions;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Permissions updated successfully',
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getAgents = async (req, res, next) => {
+  try {
+    const agents = await Agent.find()
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: agents
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+exports.getAgentById = async (req, res, next) => {
+  try {
+    const agent = await Agent.findById(req.params.id)
+      .populate('productPricing.service')
+      .select('-password');
+    
+    if (!agent) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    const allServices = await Service.find({ isActive: true });
+
+    res.json({
+      success: true,
+      data: {
+        agent,
+        allServices
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.updateAgentProducts = async (req, res, next) => {
+  try {
+    const { productPricing } = req.body;
+    const agent = await Agent.findById(req.params.id);
+
+    if (!agent) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    agent.productPricing = productPricing;
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Agent product pricing updated successfully',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.approveAgent = async (req, res, next) => {
+  try {
+    const agent = await Agent.findById(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });
+    
+    agent.isApproved = true;
+    agent.isBlocked = false; 
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Agent approved and activated successfully',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.createAgent = async (req, res, next) => {
+  try {
+    const { companyName, contactPerson, email, phone, companyDetails, tradeLicense, address } = req.body;
+    const finalCompanyDetails = companyDetails || { tradeLicense: tradeLicense || '', address: address || '' };
+
+
+
+    const existingAgent = await Agent.findOne({ email });
+    if (existingAgent) {
+      return res.status(400).json({
+        success: false,
+        message: 'Agent with this email already exists'
+      });
+    }
+
+    
+    const setupToken = crypto.randomBytes(32).toString('hex');
+
+    const agent = await Agent.create({
+      companyName,
+      contactPerson,
+      email,
+      phone,
+      companyDetails: finalCompanyDetails,
+      setupPasswordToken: setupToken,
+      setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000, 
+      isApproved: true
+    });
+
+    
+    await mailer.sendAgentInvitation(email, {
+        companyName,
+        contactPerson,
+        token: setupToken
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Agent created successfully. Invitation email sent.',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getDrivers = async (req, res, next) => {
+  try {
+    const drivers = await Driver.find()
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: drivers
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.createDriver = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, licenseNumber, licenseExpiry } = req.body;
+
+    const existingDriver = await Driver.findOne({ $or: [{ email }, { phone }] });
+    if (existingDriver) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver with this email or phone already exists'
+      });
+    }
+
+    const driver = await Driver.create({
+      name,
+      email,
+      phone,
+      password,
+      licenseNumber,
+      licenseExpiry
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Driver created successfully',
+      data: {
+        _id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.rejectAgent = async (req, res, next) => {
+  try {
+    const agent = await Agent.findById(req.params.id);
+    if (!agent) return res.status(404).json({ success: false, message: 'Agent not found' });
+    
+    agent.isBlocked = true;
+    agent.isApproved = false; 
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Agent blocked and rejected successfully',
+      data: agent
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.deleteAgent = async (req, res, next) => {
+  try {
+    console.log(`[Admin] Permanent deletion requested for agent ID: ${req.params.id}`);
+    const agent = await Agent.findByIdAndDelete(req.params.id);
+    if (!agent) {
+      console.warn(`[Admin] Delete failed: Agent ${req.params.id} not found`);
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    console.log(`[Admin] Successfully deleted agent: ${agent.companyName} (${agent.email})`);
+    res.json({
+      success: true,
+      message: 'Agent deleted permanently'
+    });
+  } catch (error) {
+    console.error(`[Admin] Error deleting agent ${req.params.id}:`, error);
+    next(error);
+  }
+};
+
+
+exports.getBookings = async (req, res, next) => {
+  try {
+    const { status, source, startDate, endDate, search, page = 1, limit = 20 } = req.query;
+
+    let query = {};
+
+    if (status) query.status = status;
+    
+    if (source === 'agent') {
+        query.agent = { $exists: true };
+    } else if (source === 'user') {
+        query.agent = { $exists: false };
+    }
+
+    if (startDate || endDate) {
+        query.travelDate = {};
+        if (startDate) query.travelDate.$gte = new Date(startDate);
+        if (endDate) query.travelDate.$lte = new Date(endDate);
+    }
+
+    if (search) {
+        query.$or = [
+            { bookingNumber: { $regex: search, $options: 'i' } },
+            { firstName: { $regex: search, $options: 'i' } },
+            { lastName: { $regex: search, $options: 'i' } },
+            { passengerName: { $regex: search, $options: 'i' } },
+            { "passportDetails.number": { $regex: search, $options: 'i' } }
+        ];
+    }
+
+    const bookings = await Booking.find(query)
+      .populate('user', 'name email phone')
+      .populate('agent', 'companyName email phone')
+      .populate('visa')
+      .populate('bus')
+      .populate('seat')
+      .populate('additionalSeats')
+      .populate('payment')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+    await syncCompletedBookings(bookings);
+
+    const count = await Booking.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: {
+        bookings,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        total: count
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.updateBookingStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+
+    const booking = await Booking.findById(req.params.id).populate('user', 'name email').populate('agent', 'companyName email');
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const previousStatus = booking.status;
+    booking.status = status;
+    await booking.save();
+
+    
+    const { sendNotification } = require('./notificationController');
+
+    const statusMessages = {
+      confirmed: `✅ Your booking ${booking.bookingNumber} has been approved and confirmed!`,
+      processing: `🔄 Your booking ${booking.bookingNumber} is now being processed.`,
+      cancelled: `❌ Your booking ${booking.bookingNumber} has been cancelled.`,
+      pending: `⏳ Your booking ${booking.bookingNumber} status has been updated to pending.`
+    };
+
+    const notificationMessage = statusMessages[status] || `Your booking ${booking.bookingNumber} status updated to ${status}.`;
+
+    
+    if (booking.user) {
+      await sendNotification(booking.user._id, 'User', 'booking_confirmation', notificationMessage);
+    }
+
+    
+    if (booking.agent) {
+      await sendNotification(booking.agent._id, 'Agent', 'booking_confirmation', notificationMessage);
+    }
+
+    res.json({
+      success: true,
+      message: 'Booking status updated successfully',
+      data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getPayments = async (req, res, next) => {
+  try {
+    const payments = await Payment.find()
+      .populate('booking')
+      .populate('user')
+      .populate('agent')
+      .sort({ status: 1, createdAt: -1 }); 
+
+    res.json({
+      success: true,
+      data: payments
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.approvePayment = async (req, res, next) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found' });
+    }
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Payment is already processed' });
+    }
+
+    if (payment.type === 'recharge' && payment.agent) {
+      const agent = await Agent.findById(payment.agent);
+      if (agent) {
+        const rechargeAmount = Number(payment.amount);
+        agent.wallet.balance += rechargeAmount;
+        agent.wallet.transactions.unshift({
+          type: 'credit',
+          amount: payment.amount,
+          description: `Wallet recharge confirmed by Accountant (Txn: ${payment.transactionId})`
+        });
+        await agent.save();
+      }
+    }
+
+    payment.status = 'completed';
+    await payment.save();
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed and balance updated',
+      data: payment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+exports.addWalletBalance = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    const agent = await Agent.findById(req.params.id);
+
+    agent.wallet.balance += Number(req.body.amount);
+    agent.wallet.transactions.unshift({
+      type: 'credit',
+      amount,
+      description: 'Balance added by admin'
+    });
+
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Balance added successfully',
+      data: {
+        balance: agent.wallet.balance
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.deductWalletBalance = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    const agent = await Agent.findById(req.params.id);
+
+    if (agent.wallet.balance < amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient balance'
+      });
+    }
+
+    agent.wallet.balance -= amount;
+    agent.wallet.transactions.unshift({
+      type: 'debit',
+      amount,
+      description: 'Balance deducted by admin'
+    });
+
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: 'Balance deducted successfully',
+      data: {
+        balance: agent.wallet.balance
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getRefunds = async (req, res, next) => {
+  try {
+    const RefundRequest = require('../models/RefundRequest');
+    const refunds = await RefundRequest.find()
+      .populate('agent', 'companyName email phone')
+      .populate('processedBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: refunds
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.processRefund = async (req, res, next) => {
+  try {
+    const { status, transferSlip, rejectionReason } = req.body;
+    const RefundRequest = require('../models/RefundRequest');
+    
+    const refund = await RefundRequest.findById(req.params.id).populate('agent');
+    
+    if (!refund) {
+      return res.status(404).json({
+        success: false,
+        message: 'Refund request not found'
+      });
+    }
+
+    if (refund.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Refund request already processed'
+      });
+    }
+
+    refund.status = status;
+    refund.processedBy = req.userId;
+    
+    if (status === 'approved') {
+      refund.transferSlip = transferSlip;
+      
+      
+      const agent = await Agent.findById(refund.agent._id);
+      agent.wallet.balance -= refund.amount;
+      agent.wallet.transactions.unshift({
+        type: 'debit',
+        amount: refund.amount,
+        description: `Refund processed - AED ${refund.amount} transferred to bank`
+      });
+      await agent.save();
+
+      
+      mailer.sendMail({
+        to: refund.agent.email,
+        subject: 'Refund Request Approved - Rays International',
+        html: `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: #10b981;">Refund Approved</h2>
+            <p>Dear ${refund.agent.companyName},</p>
+            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been approved and processed.</p>
+            <p>The amount has been transferred to your registered bank account.</p>
+            <p>Thank you for your business!</p>
+            <hr />
+            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+          </div>
+        `
+      });
+    } else if (status === 'rejected') {
+      refund.rejectionReason = rejectionReason;
+      
+      
+      mailer.sendMail({
+        to: refund.agent.email,
+        subject: 'Refund Request Rejected - Rays International',
+        html: `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: #ef4444;">Refund Request Rejected</h2>
+            <p>Dear ${refund.agent.companyName},</p>
+            <p>Your refund request of <strong>AED ${refund.amount}</strong> has been rejected.</p>
+            <p><strong>Reason:</strong> ${rejectionReason}</p>
+            <p>If you have any questions, please contact our finance team.</p>
+            <hr />
+            <p style="font-size: 12px; color: #9ca3af;">Rays International Express Services</p>
+          </div>
+        `
+      });
+    }
+
+    await refund.save();
+
+    res.json({
+      success: true,
+      message: `Refund ${status} successfully`,
+      data: refund
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getSettings = async (req, res, next) => {
+  try {
+    const Setting = require('../models/Setting');
+    const settings = await Setting.find();
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.updateSetting = async (req, res, next) => {
+  try {
+    const { key, value } = req.body;
+    const Setting = require('../models/Setting');
+    
+    let setting = await Setting.findOne({ key });
+    if (setting) {
+      setting.value = value;
+      setting.updatedBy = req.userId;
+      await setting.save();
+    } else {
+      setting = await Setting.create({
+        key,
+        value,
+        updatedBy: req.userId
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Setting updated successfully',
+      data: setting
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getServices = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const services = await Service.find().sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      data: services
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.createService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.create(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Service created successfully',
+      data: service
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.updateService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
+    
+    res.json({
+      success: true,
+      message: 'Service updated successfully',
+      data: service
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.deleteService = async (req, res, next) => {
+  try {
+    const Service = require('../models/Service');
+    const service = await Service.findByIdAndDelete(req.params.id);
+    if (!service) return res.status(404).json({ success: false, message: 'Service not found' });
+    
+    res.json({
+      success: true,
+      message: 'Service deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 
 exports.getDriverLocations = async (req, res, next) => {
@@ -46,3 +871,4 @@ exports.getDriverLocations = async (req, res, next) => {
     next(error);
   }
 };
+

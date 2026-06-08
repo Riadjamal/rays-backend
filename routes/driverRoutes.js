@@ -1,4 +1,45 @@
-const express = require('express');const router = express.Router();const driverController = require('../controllers/driverController');const auth = require('../middleware/auth');const { authorize } = require('../middleware/roleMiddleware');router.use(auth);router.use(authorize('driver'));router.get('/dashboard', driverController.getDashboard);router.get('/profile', driverController.getProfile);router.get('/trips', driverController.getTrips);router.get('/trips/:id', driverController.getTripById);router.get('/trips/:busId/passengers/:travelDate', driverController.getPassengerList);router.get('/route', driverController.getRouteDetails);router.post('/check-in', driverController.checkInPassenger);router.post('/start-trip', driverController.startTrip);router.get('/notifications', driverController.getNotifications);
+const express = require('express');
+const router = express.Router();
+const driverController = require('../controllers/driverController');
+const auth = require('../middleware/auth');
+const { authorize } = require('../middleware/roleMiddleware');
+
+
+router.use(auth);
+router.use(authorize('driver'));
+
+
+router.get('/dashboard', driverController.getDashboard);
+
+
+router.get('/profile', driverController.getProfile);
+
+
+router.get('/trips', driverController.getTrips);
+
+
+router.get('/trips/:id', driverController.getTripById);
+
+
+router.get('/trips/:busId/passengers/:travelDate', driverController.getPassengerList);
+
+
+router.get('/route', driverController.getRouteDetails);
+
+router.post('/scan-ticket', driverController.scanTicket);
+
+
+
+router.post('/check-in', driverController.checkInPassenger);
+
+
+router.post('/start-trip', driverController.startTrip);
+
+
+router.get('/notifications', driverController.getNotifications);
 
 router.patch('/location', driverController.updateLocation);
-router.post('/stop-tracking', driverController.stopTracking);module.exports = router;
+router.post('/stop-tracking', driverController.stopTracking);
+
+module.exports = router;
+
