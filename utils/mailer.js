@@ -1,96 +1,28 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const readMailEnv = (...keys) => {
-    for (const key of keys) {
-        const value = process.env[key];
-        if (typeof value === 'string' && value.trim()) {
-            return value.trim().replace(/^["']|["']$/g, '');
-        }
-    }
-    return '';
-};
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-const parseBoolean = (value, fallback = false) => {
-    if (typeof value === 'boolean') return value;
-    if (typeof value !== 'string') return fallback;
-
-    const normalized = value.trim().toLowerCase();
-    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
-    if (['false', '0', 'no', 'off'].includes(normalized)) return false;
-    return fallback;
-};
-
-const getMailPort = () => {
-    const parsedPort = Number.parseInt(readMailEnv('EMAIL_PORT', 'SMTP_PORT', 'MAIL_PORT'), 10);
-    return Number.isFinite(parsedPort) ? parsedPort : 465;
-};
-
-const getMailConfig = () => {
-    const port = getMailPort();
-    const secure = parseBoolean(readMailEnv('EMAIL_SECURE', 'SMTP_SECURE', 'MAIL_SECURE'), port === 465);
-    const requireTLS = parseBoolean(readMailEnv('EMAIL_REQUIRE_TLS', 'SMTP_REQUIRE_TLS', 'MAIL_REQUIRE_TLS'), port === 587);
-    const rejectUnauthorized = parseBoolean(readMailEnv('EMAIL_TLS_REJECT_UNAUTHORIZED', 'SMTP_TLS_REJECT_UNAUTHORIZED', 'MAIL_TLS_REJECT_UNAUTHORIZED'), false);
-    const host = readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || 'smtp.gmail.com';
-    const user = readMailEnv('EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
-    const pass = readMailEnv('EMAIL_PASSWORD', 'SMTP_PASSWORD', 'MAIL_PASSWORD');
-
-    return {
-        host,
-        port,
-        secure,
-        auth: {
-            user,
-            pass
-        },
-        requireTLS,
-        connectionTimeout: Number.parseInt(readMailEnv('EMAIL_CONNECTION_TIMEOUT_MS', 'SMTP_CONNECTION_TIMEOUT_MS', 'MAIL_CONNECTION_TIMEOUT_MS'), 10) || 15000,
-        greetingTimeout: Number.parseInt(readMailEnv('EMAIL_GREETING_TIMEOUT_MS', 'SMTP_GREETING_TIMEOUT_MS', 'MAIL_GREETING_TIMEOUT_MS'), 10) || 15000,
-        socketTimeout: Number.parseInt(readMailEnv('EMAIL_SOCKET_TIMEOUT_MS', 'SMTP_SOCKET_TIMEOUT_MS', 'MAIL_SOCKET_TIMEOUT_MS'), 10) || 20000,
-        tls: {
-            rejectUnauthorized,
-            servername: readMailEnv('EMAIL_TLS_SERVERNAME', 'SMTP_TLS_SERVERNAME', 'MAIL_TLS_SERVERNAME') || host
-        }
-    };
-};
-
-const transporter = nodemailer.createTransport(getMailConfig());
-
-const getMailboxUser = () => readMailEnv('EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
-const getMailboxInbox = () => readMailEnv('EMAIL_TO', 'SMTP_TO', 'MAIL_TO', 'EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
-
-const getFromAddress = (fallbackName = 'Rays International') => {
-    const senderEmail = readMailEnv('EMAIL_FROM', 'SMTP_FROM', 'MAIL_FROM') || getMailboxUser();
-    return `"${fallbackName}" <${senderEmail}>`;
-};
+const FROM_ADDRESS = 'noreply@raysbuses.com';
 
 const sendMail = async (options) => {
-    const mailOptions = {
-        from: getFromAddress('Rays International Support'),
-        ...options
-    };
-
+    const { from, to, subject, html } = options;
     try {
-        return await transporter.sendMail(mailOptions);
+        const result = await resend.emails.send({
+            from: from || `"Rays International Support" <${FROM_ADDRESS}>`,
+            to,
+            subject,
+            html
+        });
+        return result;
     } catch (error) {
         console.error('Email sending failed:', error);
         throw error;
     }
 };
 
-const verifyTransport = async () => {
-    try {
-        await transporter.verify();
-        console.log(`SMTP transport verified for ${readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || 'smtp.gmail.com'}:${getMailPort()}`);
-        return true;
-    } catch (error) {
-        console.error('SMTP transport verification failed:', error.message);
-        return false;
-    }
-};
-
 exports.sendBookingConfirmation = async (email, bookingDetails) => {
     await sendMail({
-        from: getFromAddress('Rays International'),
+        from: `"Rays International" <${FROM_ADDRESS}>`,
         to: email,
         subject: `Booking Confirmed - ${bookingDetails.bookingNumber}`,
         html: `
@@ -112,7 +44,7 @@ exports.sendBookingConfirmation = async (email, bookingDetails) => {
 
 exports.sendVisaApproved = async (email, bookingDetails) => {
     await sendMail({
-        from: getFromAddress('Rays International'),
+        from: `"Rays International" <${FROM_ADDRESS}>`,
         to: email,
         subject: `Oman Visa Approved - ${bookingDetails.bookingNumber}`,
         html: `
@@ -130,15 +62,12 @@ exports.sendVisaApproved = async (email, bookingDetails) => {
 };
 
 exports.sendMail = sendMail;
-exports.verifyTransport = verifyTransport;
-exports.getMailboxUser = getMailboxUser;
-exports.getMailboxInbox = getMailboxInbox;
 
 exports.sendAgentInvitation = async (email, agentDetails) => {
     const setupLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/setup-password?token=${agentDetails.token}&email=${email}`;
 
     await sendMail({
-        from: getFromAddress('Rays International'),
+        from: `"Rays International" <${FROM_ADDRESS}>`,
         to: email,
         subject: 'Welcome to Rays International - Partner Account Setup',
         html: `
