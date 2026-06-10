@@ -54,6 +54,13 @@ const busSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDaily: {
+    type: Boolean,
+    default: true
+  },
+  operatingDates: [{
+    type: String // YYYY-MM-DD
+  }],
   price: {
     type: Number,
     required: [true, 'Bus ticket price is required'],

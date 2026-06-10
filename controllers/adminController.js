@@ -158,10 +158,8 @@ exports.updateUser = async (req, res, next) => {
     if (role) user.role = role;
     if (permissions) user.permissions = permissions;
     if (req.body.password) {
-        const bcrypt = require('bcryptjs');
-        user.password = await bcrypt.hash(req.body.password, 10);
+        user.password = req.body.password;
     }
-    
     
     await user.save();
 
@@ -538,7 +536,13 @@ exports.getPayments = async (req, res, next) => {
       .populate('booking')
       .populate('user')
       .populate('agent')
-      .sort({ status: 1, createdAt: -1 }); 
+      .sort({ createdAt: -1 }); 
+
+    payments.sort((a, b) => {
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      return 0;
+    });
 
     res.json({
       success: true,
@@ -583,6 +587,20 @@ exports.approvePayment = async (req, res, next) => {
       message: 'Payment confirmed and balance updated',
       data: payment
     });
+
+    if (payment.agent) {
+      try {
+        const { sendNotification } = require('./notificationController');
+        await sendNotification(
+          payment.agent,
+          'Agent',
+          'wallet_recharge',
+          `Your wallet recharge of AED ${payment.amount} has been approved and credited.`
+        );
+      } catch (err) {
+        console.error('Failed to notify agent of payment approval:', err);
+      }
+    }
   } catch (error) {
     next(error);
   }
@@ -658,6 +676,12 @@ exports.getRefunds = async (req, res, next) => {
       .populate('agent', 'companyName email phone')
       .populate('processedBy', 'name email')
       .sort({ createdAt: -1 });
+
+    refunds.sort((a, b) => {
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      return 0;
+    });
 
     res.json({
       success: true,
@@ -744,6 +768,17 @@ exports.processRefund = async (req, res, next) => {
     }
 
     await refund.save();
+
+    try {
+      const { sendNotification } = require('./notificationController');
+      const msg = status === 'approved' 
+        ? `Your refund request of AED ${refund.amount} has been approved and processed.`
+        : `Your refund request of AED ${refund.amount} has been rejected. Reason: ${rejectionReason}`;
+        
+      await sendNotification(refund.agent._id, 'Agent', 'wallet_recharge', msg);
+    } catch (err) {
+      console.error('Failed to notify agent of refund status:', err);
+    }
 
     res.json({
       success: true,

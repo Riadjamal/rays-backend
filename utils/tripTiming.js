@@ -2,11 +2,30 @@ const Booking = require('../models/Booking');
 
 const ACTIVE_BOOKING_STATUSES = ['pending', 'processing', 'confirmed'];
 
+const getUaeNow = () => {
+  const now = new Date();
+  const uaeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Dubai' });
+  return new Date(uaeStr);
+};
+
 const normalizeDateOnly = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
+  if (!value) return null;
+  let d;
+  if (typeof value === 'string' && value.includes('T')) {
+    const uaeStr = new Date(value).toLocaleString('en-US', { timeZone: 'Asia/Dubai' });
+    d = new Date(uaeStr);
+  } else {
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      d = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+    } else {
+      d = new Date(value);
+    }
+  }
+
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
 };
 
 const parseTimeParts = (timeValue = '') => {
@@ -51,27 +70,27 @@ const getTripStartDateTime = (item) => {
   return tripDate;
 };
 
-const hasTripDeparted = (item, now = new Date()) => {
+const hasTripDeparted = (item, now = getUaeNow()) => {
   const tripStart = getTripStartDateTime(item);
   if (!tripStart) return false;
   return tripStart.getTime() <= now.getTime();
 };
 
-const isPastCalendarDate = (value, now = new Date()) => {
+const isPastCalendarDate = (value, now = getUaeNow()) => {
   const requestedDate = normalizeDateOnly(value);
   const today = normalizeDateOnly(now);
   if (!requestedDate || !today) return false;
   return requestedDate.getTime() < today.getTime();
 };
 
-const isTodayDate = (value, now = new Date()) => {
+const isTodayDate = (value, now = getUaeNow()) => {
   const requestedDate = normalizeDateOnly(value);
   const today = normalizeDateOnly(now);
   if (!requestedDate || !today) return false;
   return requestedDate.getTime() === today.getTime();
 };
 
-const syncCompletedBookings = async (bookings = [], now = new Date()) => {
+const syncCompletedBookings = async (bookings = [], now = getUaeNow()) => {
   const staleBookings = bookings.filter(
     (booking) => ACTIVE_BOOKING_STATUSES.includes(booking.status) && hasTripDeparted(booking, now)
   );
@@ -93,6 +112,7 @@ const syncCompletedBookings = async (bookings = [], now = new Date()) => {
 
 module.exports = {
   ACTIVE_BOOKING_STATUSES,
+  getUaeNow,
   getTripStartDateTime,
   hasTripDeparted,
   isPastCalendarDate,

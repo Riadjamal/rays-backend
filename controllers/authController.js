@@ -117,7 +117,7 @@ exports.login = async (req, res, next) => {
 
     let user;
     let detectedRole;
-    const searchEmail = email.toLowerCase();
+    const searchEmail = email.trim().toLowerCase();
 
     
     user = await Admin.findOne({ email: searchEmail }).select('+password');

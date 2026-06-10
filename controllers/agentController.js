@@ -126,6 +126,31 @@ exports.rechargeWallet = async (req, res, next) => {
         status: payment.status
       }
     });
+
+    // Notify Admins
+    try {
+      const { sendNotification } = require('./notificationController');
+      const Admin = require('../models/Admin');
+      const User = require('../models/User');
+      const agentObj = await Agent.findById(req.userId);
+      const companyName = agentObj ? agentObj.companyName : 'Agent';
+
+      const [admins, financeStaff] = await Promise.all([
+        Admin.find({}),
+        User.find({ role: 'finance' })
+      ]);
+
+      const msg = `New Wallet Recharge Request: AED ${amount} from ${companyName} via ${mappedMethod}.`;
+
+      for (const admin of admins) {
+        await sendNotification(admin._id, 'Admin', 'finance_alert', msg);
+      }
+      for (const staff of financeStaff) {
+        await sendNotification(staff._id, 'User', 'finance_alert', msg);
+      }
+    } catch (notificationError) {
+      console.error('Failed to send recharge notification:', notificationError);
+    }
   } catch (error) {
     next(error);
   }
