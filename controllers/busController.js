@@ -176,7 +176,13 @@ exports.deleteBus = async (req, res, next) => {
       });
     }
 
+    const driverId = bus.driver;
     await bus.deleteOne();
+
+    if (driverId) {
+      const Driver = require('../models/Driver');
+      await Driver.findByIdAndUpdate(driverId, { $pull: { assignedBuses: bus._id } });
+    }
 
     res.json({
       success: true,
