@@ -49,7 +49,9 @@ const getMailConfig = () => {
         tls: {
             rejectUnauthorized,
             servername: readMailEnv('EMAIL_TLS_SERVERNAME', 'SMTP_TLS_SERVERNAME', 'MAIL_TLS_SERVERNAME') || host
-        }
+        },
+        // Force IPv4, prevents ETIMEDOUT in strict cloud environments like Railway
+        family: 4
     };
 };
 
