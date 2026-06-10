@@ -81,7 +81,7 @@ exports.getAllBuses = async (req, res, next) => {
         return busObj;
       }));
 
-      if (filterDepartedToday) {
+      if (filterDepartedToday && req.query.showAllTimes !== 'true') {
         busesWithAvailability = busesWithAvailability.filter((bus) =>
           !hasTripDeparted({
             travelDate: startOfDay,
