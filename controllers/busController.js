@@ -64,10 +64,12 @@ exports.getAllBuses = async (req, res, next) => {
       endOfDay.setHours(23, 59, 59, 999);
       const filterDepartedToday = isTodayDate(date);
 
-      busesWithAvailability = busesWithAvailability.filter(bus => {
-        if (bus.isDaily !== false) return true;
-        return bus.operatingDates && bus.operatingDates.includes(date);
-      });
+      if (req.query.showAllTimes !== 'true') {
+        busesWithAvailability = busesWithAvailability.filter(bus => {
+          if (bus.isDaily !== false) return true;
+          return bus.operatingDates && bus.operatingDates.includes(date);
+        });
+      }
 
       busesWithAvailability = await Promise.all(busesWithAvailability.map(async (bus) => {
         const bookedCount = await Seat.countDocuments({
