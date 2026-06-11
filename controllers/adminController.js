@@ -312,16 +312,19 @@ exports.createAgent = async (req, res, next) => {
       isApproved: true
     });
 
-    
-    await mailer.sendAgentInvitation(email, {
-        companyName,
-        contactPerson,
-        token: setupToken
-    });
+    try {
+      await mailer.sendAgentInvitation(email, {
+          companyName,
+          contactPerson,
+          token: setupToken
+      });
+    } catch (mailError) {
+      console.error("Failed to send agent invitation email:", mailError);
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Agent created successfully. Invitation email sent.',
+      message: 'Agent created successfully.',
       data: agent
     });
   } catch (error) {

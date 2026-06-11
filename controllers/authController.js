@@ -85,12 +85,15 @@ exports.registerAgent = async (req, res) => {
       setupPasswordTokenExpires: Date.now() + 48 * 60 * 60 * 1000 
     });
 
-    
-    await mailer.sendAgentInvitation(email, {
-        companyName,
-        contactPerson,
-        token: setupToken
-    });
+    try {
+      await mailer.sendAgentInvitation(email, {
+          companyName,
+          contactPerson,
+          token: setupToken
+      });
+    } catch (mailError) {
+      console.error("Failed to send agent invitation email during registration:", mailError);
+    }
 
     res.status(201).json({
       success: true,
