@@ -74,6 +74,38 @@ const getFromAddress = (fallbackName = 'Rays International') => {
 };
 
 const sendMail = async (options) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+
+    if (resendApiKey) {
+        try {
+            const from = options.from || getFromAddress('Rays International Support');
+            const to = Array.isArray(options.to) ? options.to : [options.to];
+            
+            const response = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${resendApiKey.trim()}`
+                },
+                body: JSON.stringify({
+                    from,
+                    to,
+                    subject: options.subject,
+                    html: options.html
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || JSON.stringify(data));
+            }
+            return data;
+        } catch (error) {
+            console.error('Email sending failed via Resend API:', error);
+            throw error;
+        }
+    }
+
     const mailOptions = {
         from: getFromAddress('Rays International Support'),
         ...options
