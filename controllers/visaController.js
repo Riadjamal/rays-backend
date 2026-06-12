@@ -349,7 +349,7 @@ exports.agentUpdateVisa = async (req, res, next) => {
     }
 
     
-    if (visa.booking.agent.toString() !== req.userId) {
+    if (!visa.booking.agent || visa.booking.agent._id.toString() !== req.userId) {
       return res.status(403).json({ success: false, message: 'Not authorized to update this visa' });
     }
 

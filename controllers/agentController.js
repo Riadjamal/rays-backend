@@ -525,6 +525,15 @@ exports.cancelBooking = async (req, res, next) => {
 
     booking.status = 'cancelled';
     booking.cancellationDate = now;
+    
+    // Release seats so others can book them
+    if (booking.seat) {
+      await Seat.findByIdAndDelete(booking.seat);
+    }
+    if (booking.returnSeat) {
+      await Seat.findByIdAndDelete(booking.returnSeat);
+    }
+
     await booking.save();
 
     
