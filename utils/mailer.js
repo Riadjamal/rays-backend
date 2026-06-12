@@ -177,7 +177,12 @@ exports.getMailboxUser = getMailboxUser;
 exports.getMailboxInbox = getMailboxInbox;
 
 exports.sendAgentInvitation = async (email, agentDetails) => {
-    const setupLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/setup-password?token=${agentDetails.token}&email=${email}`;
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    let agentSetupDomain = clientUrl;
+    if (clientUrl.includes('raysbuses.com')) {
+        agentSetupDomain = 'https://agent.raysbuses.com';
+    }
+    const setupLink = `${agentSetupDomain}/setup-password?token=${agentDetails.token}&email=${email}`;
 
     await sendMail({
         from: getFromAddress('Rays International'),
