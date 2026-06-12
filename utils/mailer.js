@@ -61,7 +61,15 @@ const getMailboxUser = () => readMailEnv('EMAIL_USER', 'SMTP_USER', 'MAIL_USERNA
 const getMailboxInbox = () => readMailEnv('EMAIL_TO', 'SMTP_TO', 'MAIL_TO', 'EMAIL_USER', 'SMTP_USER', 'MAIL_USERNAME', 'MAIL_USER');
 
 const getFromAddress = (fallbackName = 'Rays International') => {
-    const senderEmail = readMailEnv('EMAIL_FROM', 'SMTP_FROM', 'MAIL_FROM') || getMailboxUser();
+    let senderEmail = readMailEnv('EMAIL_FROM', 'SMTP_FROM', 'MAIL_FROM');
+    if (!senderEmail) {
+        const host = readMailEnv('EMAIL_HOST', 'SMTP_HOST', 'MAIL_HOST') || '';
+        if (host.includes('resend.com')) {
+            senderEmail = 'noreply@raysbuses.com';
+        } else {
+            senderEmail = getMailboxUser();
+        }
+    }
     return `"${fallbackName}" <${senderEmail}>`;
 };
 
